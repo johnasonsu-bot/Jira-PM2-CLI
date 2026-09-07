@@ -1,13 +1,21 @@
 ---
 name: cli-anything-devops
-description: 通过 CLI-Anything 操作本地 Forge DevOps 工作台的项目、工作项、看板状态、迭代、评论、版本和进度报告。用户要求用中文对话管理此系统时使用；不用于操作远端 Jira。
+description: 用户用中文管理本地 Forge DevOps 的项目、任务、迭代、版本，或统计开发人员工作量、负载排名和管理指标时使用；不用于远端 Jira 或无关代码开发。
 ---
 
 # Forge DevOps conversational operations
 
-Use the real `cli-anything-devops` executable to operate the existing local system. The browser at `http://127.0.0.1:8766` and CLI share one HTTP API and persistent SQLite store. Do not write SQL or substitute a separate task file.
+Use the existing Forge system through its registered `forge-devops` MCP tools for queries, and `cli-anything-devops` for authorized edits. Both share the browser's HTTP API at `http://127.0.0.1:8766` and persistent SQLite store. Do not write SQL or substitute a separate task file.
 
-## Connection
+## Read-only queries and workload rankings: MCP first
+
+If `forge-devops` MCP tools are available, use `health` and `list_projects`, then `rank_workload(project=..., scope="project", sort_by="open_points")` for developer workload statistics. Use tool discovery for this server when tools are deferred. Use `get_analytics` for other management indicators and `get_issue` for details. Do not treat the separate `cua_repl` browser MCP as Forge's data MCP.
+
+For a question like “帮我对现在开发人员工作量进行一个排名统计”, use the discovered projects; if no project is specified, report them separately, marking empty projects and DEMO examples. Default scope is project, including backlog; use active only when the user requests the current iteration. Never add story points across projects. Report pending SP, pending items, in-progress, review and high-priority counts. Use coverage.open_*_pct for current-work data quality and explain missing due dates. SP is not hours and workload is not performance or capacity utilization.
+
+If Forge MCP is unavailable in this session, use the CLI query route below. A CLI loopback connection failure can be a client sandbox restriction, not proof the service is stopped; check an available Forge MCP health tool before any startup diagnosis. A statistical question does not authorize starting services, changing permissions, seeding tasks or modifying data.
+
+## CLI connection (authorized edits or MCP unavailable)
 
 Run `cli-anything-devops --json health`, then `cli-anything-devops --json project list` to find the requested project. `--url http://127.0.0.1:8766` can select a different local port. If unavailable, locate `forge-devops-server` and the existing running process before starting another instance. Do not reset the database or seed duplicate demo projects.
 
