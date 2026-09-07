@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Forge · 研发工作台</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/analytics.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/"><span class="brand-icon">f</span><span>forge<span class="brand-dot">.</span></span></a>
+    <div class="workspace-label">WORKSPACE <span>LOCAL</span></div>
+    <div class="project-box"><span class="project-icon">F</span><select id="project-select" aria-label="选择项目"></select><button id="new-project" title="创建项目" aria-label="创建项目">＋</button></div>
+    <p class="nav-label">项目空间</p>
+    <nav aria-label="主要导航">
+      <button data-view="board" class="active"><span>▥</span> 工作看板 <i>01</i></button>
+      <button data-view="analytics" aria-label="管理分析"><span>▤</span> 管理分析</button>
+      <button data-view="backlog"><span>≡</span> 工作项 <i id="nav-count">0</i></button>
+      <button data-view="sprints"><span>◷</span> 迭代计划</button>
+      <button data-view="releases"><span>◇</span> 版本发布</button>
+      <button data-view="activity"><span>↗</span> 活动记录</button>
+    </nav>
+    <p class="nav-label">协作与自动化</p>
+    <nav><button data-view="guide"><span>⌘</span> Codex & CLI <span class="tiny-dot"></span></button></nav>
+    <div class="sidebar-bottom"><div class="assistant-mark">✳</div><strong>从想法，到交付。</strong><p>在 Codex 中描述你的目标，<br>让工作流跟上你的思路。</p><button data-view="guide">查看对话操作指南 ↗</button><div class="profile"><span class="avatar">S</span><div>本地工作空间<small>个人研发环境</small></div><span class="live-dot"></span></div></div>
+  </aside>
+  <div class="workspace">
+    <header><div class="breadcrumbs">工作空间 <span>/</span> <b id="project-name">Forge DevOps</b> <span>/</span> <span id="view-crumb">工作看板</span></div><div class="header-right"><span class="connection" id="connection">连接中</span><span class="avatar small">S</span></div></header>
+    <main>
+      <div class="page-heading"><div><div class="eyebrow" id="eyebrow">BUILD SOMETHING GREAT</div><h1 id="heading">工作看板</h1><p id="subtitle">每一步进展，都清晰可见。</p></div><button class="primary" id="new-issue">＋ 创建工作项</button></div>
+      <div id="metrics" class="metrics"></div>
+      <section id="management-pulse"></section>
+      <section id="sprint-banner" class="sprint-banner"></section>
+      <div id="filters" class="filters"><div class="search-wrap"><span>⌕</span><input id="search" type="search" placeholder="搜索工作项、编号或描述…" aria-label="搜索工作项"></div><select id="filter-type" aria-label="筛选类型"><option value="">所有类型</option><option value="story">用户故事</option><option value="task">任务</option><option value="bug">缺陷</option><option value="epic">史诗</option></select><select id="filter-priority" aria-label="筛选优先级"><option value="">所有优先级</option><option value="critical">最高</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select><select id="filter-sprint" aria-label="筛选迭代"><option value="">所有迭代</option></select><button id="refresh" class="secondary" aria-label="刷新">↻ 刷新</button><span class="filtered-count" id="filtered-count"></span></div>
+      <div id="content" aria-live="polite"><div class="empty-state">正在连接本地工作台…</div></div>
+      <footer><span><i class="live-dot"></i> SQLite 持久化 · 网页与 CLI 实时同步</span><span id="last-update"></span></footer>
+    </main>
+  </div>
+  <dialog id="editor"><form id="edit-form"><div class="dialog-header"><div><small id="form-kicker">FORGE / WORK ITEM</small><h2 id="form-title">创建工作项</h2></div><button type="button" class="icon-button" data-close="editor" aria-label="关闭">×</button></div><div id="form-fields" class="form-fields"></div><p class="form-error" id="form-error" role="alert"></p><div class="dialog-footer"><button type="button" class="secondary" data-close="editor">取消</button><button class="primary" type="submit" id="save">保存</button></div></form></dialog>
+  <dialog id="detail"><div id="detail-content"></div></dialog>
+  <div id="toast" role="status"></div>
+  <script src="/analytics.js"></script><script src="/app.js"></script>
+</body>
+</html>

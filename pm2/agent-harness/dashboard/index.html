@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PM2 Operations Console</title>
+  <style>
+    :root { color-scheme: dark; --bg:#07111f; --panel:#0d1b2d; --line:#20344d; --text:#e7eef8; --muted:#8fa5bf; --cyan:#35d0ba; --blue:#54a8ff; --amber:#ffbf69; }
+    * { box-sizing:border-box } body { margin:0; min-height:100vh; background:radial-gradient(circle at 85% 0,#11365c 0,transparent 35%),var(--bg); color:var(--text); font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif }
+    header { display:flex; justify-content:space-between; align-items:center; padding:22px 28px; border-bottom:1px solid var(--line); background:rgba(7,17,31,.82); backdrop-filter:blur(16px); position:sticky; top:0; z-index:2 }
+    .brand { display:flex; gap:13px; align-items:center }.mark { width:38px;height:38px;border:1px solid #318d88;background:#0c3b3c;display:grid;place-items:center;transform:rotate(45deg);border-radius:9px }.mark span{transform:rotate(-45deg);font-weight:800;color:var(--cyan)}
+    h1 { font-size:18px;margin:0;letter-spacing:.02em }.sub { color:var(--muted);font-size:12px }.live { display:flex;align-items:center;gap:8px;color:var(--cyan);font-size:12px }.dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 14px var(--cyan)}
+    main { padding:24px 28px 36px;max-width:1500px;margin:auto }.toolbar{display:flex;justify-content:space-between;align-items:end;margin-bottom:16px}.toolbar h2{margin:0;font-size:26px}.meta{color:var(--muted)}
+    .grid { display:grid;grid-template-columns:1.45fr .85fr;gap:18px }.panel{background:linear-gradient(160deg,rgba(18,39,64,.94),rgba(10,24,41,.96));border:1px solid var(--line);border-radius:15px;overflow:hidden;box-shadow:0 18px 45px rgba(0,0,0,.18)}
+    .panel-title{padding:15px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;font-weight:700}.badge{font:11px ui-monospace,SFMono-Regular,monospace;color:var(--cyan);border:1px solid #236b68;border-radius:99px;padding:3px 8px}
+    table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:13px 16px;border-bottom:1px solid rgba(32,52,77,.65)}th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.09em}.status{color:var(--cyan)}.empty{padding:42px;text-align:center;color:var(--muted)}
+    .terminal{margin-top:18px;background:#050b13;border:1px solid var(--line);border-radius:15px;overflow:hidden}.term-head{padding:11px 15px;background:#101d2d;color:var(--muted);font:12px ui-monospace,monospace}.output{height:220px;padding:16px;overflow:auto;white-space:pre-wrap;color:#bed0e5;font:13px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace}.prompt{display:flex;border-top:1px solid var(--line);align-items:center;padding:0 14px;color:var(--cyan);font:13px ui-monospace,monospace}.prompt input{flex:1;background:none;border:0;outline:0;color:white;padding:14px 10px;font:inherit}
+    .codex{padding:20px}.codex h3{margin:0 0 8px;font-size:18px}.codex p{color:var(--muted);margin:0 0 18px}.suggestion{display:block;width:100%;text-align:left;color:#cbd8e8;background:#10243b;border:1px solid #284662;border-radius:10px;padding:11px 12px;margin:8px 0;cursor:pointer}.suggestion:hover{border-color:var(--blue);color:white}.hint{margin-top:18px;padding:14px;border-left:3px solid var(--blue);background:#0b2038;color:#aec3da;font-size:12px}
+    button.refresh{background:#133355;border:1px solid #2d5f88;color:white;border-radius:9px;padding:8px 12px;cursor:pointer}@media(max-width:850px){.grid{grid-template-columns:1fr}header,main{padding-left:16px;padding-right:16px}.toolbar{align-items:start;gap:10px;flex-direction:column}.table-wrap{overflow:auto}}
+  </style>
+</head>
+<body>
+  <header><div class="brand"><div class="mark"><span>PM</span></div><div><h1>PM2 Operations Console</h1><div class="sub">Local process control · Codex workspace</div></div></div><div class="live"><span class="dot"></span><span id="connection">CONNECTED</span></div></header>
+  <main>
+    <div class="toolbar"><div><div class="meta">DEVOPS / RUNTIME</div><h2>进程运行中心</h2></div><div><span class="meta" id="updated">等待刷新</span> &nbsp; <button class="refresh" onclick="refresh()">刷新</button></div></div>
+    <div class="grid">
+      <section>
+        <div class="panel"><div class="panel-title"><span>Managed Processes</span><span class="badge" id="count">0 PROCESSES</span></div><div class="table-wrap"><table><thead><tr><th>ID</th><th>Name</th><th>Status</th><th>CPU</th><th>Memory</th><th>Restarts</th><th>Uptime</th></tr></thead><tbody id="rows"></tbody></table><div id="empty" class="empty">正在读取 PM2 状态…</div></div></div>
+        <div class="terminal"><div class="term-head">● PM2 CONTROL TERMINAL — restricted command mode</div><div class="output" id="output">PM2 Operations Console ready.\n输入 help 查看允许的命令。</div><form class="prompt" id="form"><span>◆ pm2 ❯</span><input id="command" autocomplete="off" placeholder="process list"></form></div>
+      </section>
+      <aside class="panel"><div class="panel-title"><span>Codex 协作</span><span class="badge">CHAT READY</span></div><div class="codex"><h3>在左侧继续对话</h3><p>此页面负责 PM2 状态与受控操作；Codex 对话保留在应用主聊天区。点击下面的建议可复制提示词。</p><button class="suggestion">分析 codex-pm2-dashboard 的资源占用</button><button class="suggestion">查看进程错误日志并诊断</button><button class="suggestion">重启异常进程后验证状态</button><button class="suggestion">为这个服务设计部署流水线</button><div class="hint">安全边界：浏览器不会收到进程环境变量；命令行不支持管道、重定向或任意 Shell。</div></div></aside>
+    </div>
+  </main>
+  <script>
+    const rows=document.querySelector('#rows'), empty=document.querySelector('#empty'), output=document.querySelector('#output');
+    const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const memory=n=>n?`${(n/1048576).toFixed(1)} MB`:'0 MB';
+    const uptime=t=>t?`${Math.max(0,Math.floor((Date.now()-t)/1000))}s`:'—';
+    function render(items){ rows.innerHTML=items.map(p=>`<tr><td>${esc(p.id)}</td><td><strong>${esc(p.name)}</strong></td><td class="status">● ${esc(p.status)}</td><td>${esc(p.cpu)}%</td><td>${memory(p.memory)}</td><td>${esc(p.restarts)}</td><td>${uptime(p.uptime)}</td></tr>`).join(''); empty.style.display=items.length?'none':'block';empty.textContent='没有 PM2 托管进程';document.querySelector('#count').textContent=`${items.length} PROCESSES`; }
+    async function refresh(){try{const r=await fetch('/api/processes');const d=await r.json();if(!r.ok)throw Error(d.error);render(d.processes);document.querySelector('#updated').textContent=`更新于 ${new Date().toLocaleTimeString()}`;document.querySelector('#connection').textContent='CONNECTED';}catch(e){document.querySelector('#connection').textContent='DISCONNECTED';output.textContent+=`\n[ERROR] ${e.message}`}}
+    document.querySelector('#form').addEventListener('submit',async e=>{e.preventDefault();const input=document.querySelector('#command'),command=input.value.trim();if(!command)return;input.value='';if(command==='help'){output.textContent+='\n\n◆ '+command+'\nprocess list\nprocess metrics\nlogs view <name> --lines 50\nlifecycle restart <name>\nlifecycle stop <name>';return}output.textContent+=`\n\n◆ ${command}\n`;try{const r=await fetch('/api/command',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({command})});const d=await r.json();if(!r.ok)throw Error(d.error);output.textContent+=d.output||JSON.stringify(d.processes,null,2);if(d.processes)render(d.processes);await refresh()}catch(err){output.textContent+=`[ERROR] ${err.message}`}output.scrollTop=output.scrollHeight});
+    document.querySelectorAll('.suggestion').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText(b.textContent);b.textContent='已复制，可粘贴到 Codex 对话';setTimeout(()=>location.reload(),1000)});refresh();setInterval(refresh,5000);
+  </script>
+</body>
+</html>
