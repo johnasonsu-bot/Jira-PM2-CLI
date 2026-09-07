@@ -13,9 +13,14 @@
     'title', 'given_text', 'when_text', 'then_text', 'scenario_type', 'status', 'remark',
   ];
   const FIELD_LABELS = {
-    priority: '原需求优先级', acceptance_criteria: '验收标准', deliverable: '交付物',
+    priority: '需求优先级（当前）', acceptance_criteria: '验收标准', deliverable: '交付物',
     workload_md: '工作量（人天）', related_systems: '关联系统', biz_owner: '业务负责人',
     owner_side: '责任方', status: '需求评估状态', remark: '备注',
+  };
+  const REQUIRED_FIELD_LABELS = {
+    req_code: '需求编号', req_name: '需求名称', req_desc: '需求描述', project_code: '所属项目',
+    system_name: '归属系统', module_path: '所属模块', req_type: '需求类型', priority: '优先级',
+    acceptance_criteria: '验收标准', deliverable: '交付物', workload_md: '工作量（人天）',
   };
   const SCENARIO_LABELS = {
     title: '场景标题', given_text: '假如（Given）', when_text: '当（When）',
@@ -91,12 +96,16 @@
     return value === null || value === undefined || String(value).trim() === '' ? '未提供' : String(value);
   }
 
+  function missingLabel(key) {
+    return REQUIRED_FIELD_LABELS[key] || String(key ?? '');
+  }
+
   function cardMeta(issue) {
     const req = issue?.requirement;
     if (!req) return '';
     const completeness = Number.isFinite(Number(req.filled)) && Number.isFinite(Number(req.need))
       ? `${Number(req.filled)}/${Number(req.need)}` : '—';
-    return `<div class="requirement-card-meta"><span class="req-code">${escapeHtml(req.req_code || '未编号')}</span><span>${escapeHtml(req.system_name || '未提供系统')}</span><span>原优先级：${escapeHtml(priorityText(req))}</span><span>需求评估：${escapeHtml(req.status || '未提供')}</span><span>字段 ${escapeHtml(completeness)}</span></div>`;
+    return `<div class="requirement-card-meta"><span class="req-code">${escapeHtml(req.req_code || '未编号')}</span><span>${escapeHtml(req.system_name || '未提供系统')}</span><span>需求优先级（当前）：${escapeHtml(priorityText(req))}</span><span>需求评估：${escapeHtml(req.status || '未提供')}</span><span>字段 ${escapeHtml(completeness)}</span></div>`;
   }
 
   function listCells(issue) {
@@ -106,7 +115,9 @@
   }
 
   function display(value) {
-    if (value === null || value === undefined || value === '') return '未提供';
+    if (value === null) return 'NULL（未填写）';
+    if (value === undefined) return '未定义';
+    if (value === '') return '空字符串';
     if (typeof value === 'object') return JSON.stringify(value, null, 2);
     return String(value);
   }
@@ -130,7 +141,7 @@
     return `<form class="requirement-analysis-form" data-requirement-form data-key="${escapeHtml(key || requirement?.key || '')}" data-version="${escapeHtml(requirement?.version ?? 0)}">
       <div class="requirement-form-grid">
         ${selectInput('priority', FIELD_LABELS.priority, current.priority, ['P0', 'P1', 'P2'], true)}
-        ${textInput('workload_md', FIELD_LABELS.workload_md, current.workload_md, 'number', 'min="0" step="0.1"')}
+        ${textInput('workload_md', FIELD_LABELS.workload_md, current.workload_md, 'number', 'min="0" step="0.01"')}
         ${selectInput('status', FIELD_LABELS.status, current.status || '待评估', ['待评估', '已确认', '开发中', '已验收', '已否决'])}
         ${textInput('biz_owner', FIELD_LABELS.biz_owner, current.biz_owner)}
         ${textInput('owner_side', FIELD_LABELS.owner_side, current.owner_side)}
@@ -181,20 +192,23 @@
     const source = requirement.source || {};
     const requirementKey = key || requirement.key || '';
     const scenarioCount = Array.isArray(requirement.scenarios) ? requirement.scenarios.length : 0;
+    const resolvedLine = source.resolved_line === null || source.resolved_line === undefined ? '' : `<dt>正文定位行</dt><dd>${escapeHtml(source.resolved_line)}</dd>`;
+    const matchNames = {body: '需求正文匹配', unverified: '未验证（使用原始档案行）'};
+    const match = source.match === null || source.match === undefined || source.match === '' ? '' : `<dt>定位方式</dt><dd>${escapeHtml(matchNames[source.match] || source.match)}</dd>`;
     return `<section class="requirement-detail" data-source-id="${escapeHtml(requirement.source_id || '')}">
       <div class="requirement-summary">
         <div><small>原需求编号</small><strong>${escapeHtml(requirement.req_code || '未编号')}</strong></div>
         <div><small>系统</small><strong>${escapeHtml(requirement.system_name || '未提供')}</strong></div>
         <div><small>章节</small><strong>${escapeHtml(requirement.chapter || '未提供')}</strong></div>
         <div><small>需求类型</small><strong>${escapeHtml(requirement.req_type || '未提供')}</strong></div>
-        <div><small>原优先级</small><strong>${escapeHtml(priorityText(requirement))}</strong></div>
+        <div><small>需求优先级（当前）</small><strong>${escapeHtml(priorityText(requirement))}</strong></div>
         <div><small>需求评估状态</small><strong>${escapeHtml(requirement.status || requirement.current?.status || '未提供')}</strong></div>
       </div>
-      <div class="requirement-completeness"><span>源字段完整度 ${escapeHtml(requirement.filled ?? '—')}/${escapeHtml(requirement.need ?? 11)}</span>${missing.length ? `<span class="missing-fields">缺失：${missing.map(escapeHtml).join('、')}</span>` : '<span>必备字段完整</span>'}</div>
-      <section class="requirement-section"><h3>来源上下文</h3><dl class="source-context"><dt>文件</dt><dd>${escapeHtml(source.file || '未提供')}</dd><dt>行号</dt><dd>${escapeHtml(source.line ?? '未提供')}</dd></dl><pre class="source-plain">${escapeHtml(source.excerpt || '未提供来源摘录')}</pre></section>
+      <div class="requirement-completeness"><span>源字段完整度 ${escapeHtml(requirement.filled ?? '—')}/${escapeHtml(requirement.need ?? 11)}</span>${missing.length ? `<span class="missing-fields">缺失：${missing.map(field => escapeHtml(missingLabel(field))).join('、')}</span>` : '<span>必备字段完整</span>'}</div>
+      <section class="requirement-section"><h3>来源上下文</h3><dl class="source-context"><dt>文件</dt><dd>${escapeHtml(source.file || '未提供')}</dd><dt>原始档案行</dt><dd>${escapeHtml(source.line ?? '未提供')}</dd>${resolvedLine}${match}</dl><pre class="source-plain">${escapeHtml(source.excerpt || '未提供来源摘录')}</pre></section>
       <section class="requirement-section"><div class="requirement-section-heading"><h3>补充分析（可编辑）</h3><span>版本 ${escapeHtml(requirement.version ?? 0)}</span></div>${analysisForm(requirement, requirementKey)}</section>
       <section class="requirement-section"><div class="requirement-section-heading"><h3>GWT 场景 · ${scenarioCount}</h3><span>原场景始终保留</span></div>${scenarioCount ? requirement.scenarios.map(item => scenarioForm(item, requirementKey)).join('') : '<p class="requirement-empty">暂无场景</p>'}</section>
-      <section class="requirement-section source-inspection"><h3>原始快照（只读）</h3><details open><summary>原数据库完整字段</summary>${recordTable(requirement.raw)}</details><details><summary>压缩包原始完整字段</summary>${recordTable(requirement.original)}</details></section>
+      <section class="requirement-section source-inspection"><h3>原始档案（只读，不随补充分析修改）</h3><details open><summary>原数据库原始字段（含原始 priority）</summary>${recordTable(requirement.raw)}</details><details><summary>压缩包原始完整字段</summary>${recordTable(requirement.original)}</details></section>
       <div class="requirement-export"><button type="button" class="secondary" data-action="export-requirement" data-source-id="${escapeHtml(requirement.source_id || '')}">导出完整来源 JSON</button><small>仅点击时获取原始快照与全部覆盖层，可能较大。</small></div>
     </section>`;
   }
@@ -225,6 +239,6 @@
   return {
     EDITABLE_FIELDS, SCENARIO_FIELDS, escapeHtml, matches, filterValues, paginate,
     boardSlice, cardMeta, listCells, renderDetail, updatePayload, scenarioUpdatePayload,
-    pager, priorityText,
+    pager, priorityText, missingLabel,
   };
 });

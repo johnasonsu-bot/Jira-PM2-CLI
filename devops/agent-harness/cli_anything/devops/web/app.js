@@ -47,7 +47,7 @@ function updateRequirementFilters() {
   const definitions=[['#filter-req-system','system_name','所有需求系统'],['#filter-req-chapter','chapter','所有需求章节'],['#filter-req-type','req_type','所有需求类型']];
   for(const [selector,field,label] of definitions){const node=$(selector),current=node.value,values=ForgeRequirements.filterValues(state.issues,field);node.innerHTML=`<option value="">${label}</option>`+values.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');if(values.includes(current))node.value=current;}
   const missingNode=$('#filter-req-missing'),currentMissing=missingNode.value,missingValues=[...new Set(state.issues.flatMap(i=>Array.isArray(i.requirement?.missing)?i.requirement.missing:[]))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
-  missingNode.innerHTML='<option value="">所有字段完整度</option>'+missingValues.map(value=>`<option value="${esc(value)}">缺失：${esc(value)}</option>`).join('');if(missingValues.includes(currentMissing))missingNode.value=currentMissing;
+  missingNode.innerHTML='<option value="">所有字段完整度</option>'+missingValues.map(value=>`<option value="${esc(value)}">缺失：${esc(ForgeRequirements.missingLabel(value))}</option>`).join('');if(missingValues.includes(currentMissing))missingNode.value=currentMissing;
   document.querySelectorAll('.requirement-filter').forEach(node=>node.hidden=!state.issues.some(i=>i.requirement));
 }
 function render() {
@@ -162,7 +162,7 @@ async function saveRequirementForm(form,scenario=false){
   try{
     const payload=scenario?ForgeRequirements.scenarioUpdatePayload(form.dataset.key,form.dataset.scenarioCode,form.dataset.version,values):ForgeRequirements.updatePayload(form.dataset.key,form.dataset.version,values);
     await api(scenario?'requirement.scenario.update':'requirement.update',payload);
-    toast(scenario?'场景已保存，待复核状态已同步':'需求分析已保存');
+    toast(scenario?'场景已保存':'需求分析已保存');
     await refresh();await openIssue(form.dataset.key);
   }catch(error){errorNode.textContent=`保存失败：${error.message}。若为版本冲突，请刷新详情后重新确认变更。`;button.disabled=false;}
 }

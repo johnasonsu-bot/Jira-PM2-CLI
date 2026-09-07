@@ -44,13 +44,19 @@ test('ordinary issues keep using ordinary filters and are not mistaken for requi
   assert.equal(ForgeRequirements.listCells(ordinary), '');
 });
 
-test('missing source priority is explicit and requirement status stays separate from issue status', () => {
-  const issue = requirementIssue();
+test('current requirement priority is explicit and requirement status stays separate from issue status', () => {
+  const issue = requirementIssue({priority: 'P1'});
   const meta = ForgeRequirements.cardMeta(issue);
-  assert.match(meta, /原优先级：未提供/);
+  assert.match(meta, /需求优先级（当前）：P1/);
   assert.match(meta, /需求评估：待评估/);
-  assert.doesNotMatch(meta, /原优先级：中/);
+  assert.doesNotMatch(meta, /原优先级/);
   assert.doesNotMatch(meta, /待办池/);
+});
+
+test('missing current requirement priority remains explicit instead of inheriting issue medium', () => {
+  const meta = ForgeRequirements.cardMeta(requirementIssue());
+  assert.match(meta, /需求优先级（当前）：未提供/);
+  assert.doesNotMatch(meta, /需求优先级（当前）：中/);
 });
 
 test('detail safely exposes long raw and original fields, source excerpt, and every GWT value', () => {
@@ -58,7 +64,7 @@ test('detail safely exposes long raw and original fields, source excerpt, and ev
   const detail = {
     ...requirementIssue().requirement,
     source_id: 'source-1',
-    raw: {description: longText, unknown_field: '<img src=x onerror=alert(1)>', nullable: null},
+    raw: {description: longText, priority: 'P2', unknown_field: '<img src=x onerror=alert(1)>', nullable: null},
     original: {description: '原始 <b>正文</b>'},
     current: {priority: null, acceptance_criteria: '<svg onload=alert(1)>', deliverable: null, workload_md: null, related_systems: '', biz_owner: '', owner_side: '', status: '待评估', remark: ''},
     version: 7,
@@ -82,7 +88,65 @@ test('detail safely exposes long raw and original fields, source excerpt, and ev
   assert.match(html, /GWT-1/);
   assert.match(html, /name="given_text"/);
   assert.match(html, /data-version="3"/);
-  assert.match(html, /原始快照（只读）/);
+  assert.match(html, /原始档案（只读/);
+  assert.match(html, /需求优先级（当前）/);
+  assert.match(html, /<th>priority<\/th><td><pre>P2<\/pre>/);
+});
+
+test('workload editor and payload preserve valid quarter-day precision', () => {
+  const detail = {
+    ...requirementIssue({priority: 'P1'}).requirement,
+    raw: {priority: 'P2'}, original: null, current: {priority: 'P1', workload_md: 0.25, status: '待评估'},
+    source: {}, scenarios: [], version: 2,
+  };
+  const html = ForgeRequirements.renderDetail(detail, 'P1-42');
+  assert.match(html, /name="workload_md"[^>]*value="0\.25"[^>]*step="0\.01"/);
+  assert.deepEqual(ForgeRequirements.updatePayload('P1-42', 2, {workload_md: '0.25'}),
+    {key: 'P1-42', version: 2, fields: {workload_md: 0.25}});
+});
+
+test('raw archive preserves null, empty, zero, boolean and nested JSON distinctions', () => {
+  const detail = {
+    ...requirementIssue().requirement,
+    raw: {nullable: null, empty: '', zero: 0, disabled: false, nested: {enabled: true, count: 0}},
+    original: null, current: {status: '待评估'}, source: {}, scenarios: [], version: 1,
+  };
+  const html = ForgeRequirements.renderDetail(detail, 'P1-42');
+  assert.match(html, /<th>nullable<\/th><td><pre>NULL（未填写）<\/pre>/);
+  assert.match(html, /<th>empty<\/th><td><pre>空字符串<\/pre>/);
+  assert.match(html, /<th>zero<\/th><td><pre>0<\/pre>/);
+  assert.match(html, /<th>disabled<\/th><td><pre>false<\/pre>/);
+  assert.match(html, /&quot;enabled&quot;: true/);
+  assert.match(html, /&quot;count&quot;: 0/);
+});
+
+test('all required source keys have Chinese missing-field labels', () => {
+  const expected = {
+    req_code: '需求编号', req_name: '需求名称', req_desc: '需求描述', project_code: '所属项目',
+    system_name: '归属系统', module_path: '所属模块', req_type: '需求类型', priority: '优先级',
+    acceptance_criteria: '验收标准', deliverable: '交付物', workload_md: '工作量（人天）',
+  };
+  for (const [key, label] of Object.entries(expected)) assert.equal(ForgeRequirements.missingLabel(key), label);
+  assert.equal(ForgeRequirements.missingLabel('future_field'), 'future_field');
+  const detail = {
+    ...requirementIssue({missing: Object.keys(expected), filled: 0, need: 11}).requirement,
+    raw: {}, original: null, current: {status: '待评估'}, source: {}, scenarios: [], version: 1,
+  };
+  const html = ForgeRequirements.renderDetail(detail, 'P1-42');
+  for (const label of Object.values(expected)) assert.match(html, new RegExp(label.replace(/[（）]/g, '\\$&')));
+});
+
+test('source context separates original record line from resolved body location', () => {
+  const detail = {
+    ...requirementIssue().requirement,
+    raw: {}, original: null, current: {status: '待评估'}, scenarios: [], version: 1,
+    source: {file: '需求.md', line: 2, resolved_line: 5, match: 'body', excerpt: '正文匹配定位\n5: 预算审核'},
+  };
+  const html = ForgeRequirements.renderDetail(detail, 'P1-42');
+  assert.match(html, /原始档案行<\/dt><dd>2/);
+  assert.match(html, /正文定位行<\/dt><dd>5/);
+  assert.match(html, /定位方式<\/dt><dd>需求正文匹配/);
+  assert.match(html, /正文匹配定位\n5: 预算审核/);
 });
 
 test('50-row pagination reaches all 1472 requirements without silent truncation', () => {
