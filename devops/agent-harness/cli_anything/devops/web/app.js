@@ -9,6 +9,7 @@ const lifecycleNames = {planned:'计划中',active:'进行中',completed:'已完
 const viewNames = {board:'工作看板',analytics:'管理分析',backlog:'工作项',sprints:'迭代计划',releases:'版本发布',activity:'活动记录',guide:'Codex & CLI'};
 const subtitles = {board:'每一步进展，都清晰可见。',analytics:'从交付进度，到风险与资源，一页掌握。',backlog:'把想法拆成可以交付的工作。',sprints:'以目标为起点，以交付为终点。',releases:'聚合变更、验证完成度、追踪版本。',activity:'每一次协作，都有迹可循。',guide:'一句话，让你的研发工作流动起来。'};
 let state = null, view = 'board', project = new URLSearchParams(location.search).get('project') || '', selectedIssue = null, editKind = '', editItem = null, loading = false;
+let requirementPage=1,boardVisible={};
 const initialQuery=new URLSearchParams(location.search);
 if(Object.hasOwn(viewNames,initialQuery.get('view')))view=initialQuery.get('view');
 let analysisScope=initialQuery.get('scope')||'active',analysisRisk='all';
@@ -39,8 +40,15 @@ function syncLocation(){const q=new URLSearchParams();if(project)q.set('project'
 function percent(items) { return items.length?Math.round(items.filter(i=>i.status==='done').length/items.length*100):0; }
 function typeBadge(item) {return `<span class="type-icon ${esc(item.type)}">${typeIcons[item.type]||'✓'}</span>`;}
 function filtered() {
-  const q=$('#search').value.toLowerCase(),type=$('#filter-type').value,priority=$('#filter-priority').value,sprint=$('#filter-sprint').value;
-  return state.issues.filter(i=>(!q||(i.key+' '+i.title+' '+i.description+' '+i.assignee).toLowerCase().includes(q))&&(!type||i.type===type)&&(!priority||i.priority===priority)&&(!sprint||(sprint==='none'?i.sprint_id===null:String(i.sprint_id)===sprint)));
+  const filters={query:$('#search').value,issueType:$('#filter-type').value,priority:$('#filter-priority').value,sprint:$('#filter-sprint').value,system:$('#filter-req-system').value,chapter:$('#filter-req-chapter').value,reqType:$('#filter-req-type').value,missing:$('#filter-req-missing').value};
+  return state.issues.filter(i=>ForgeRequirements.matches(i,filters));
+}
+function updateRequirementFilters() {
+  const definitions=[['#filter-req-system','system_name','所有需求系统'],['#filter-req-chapter','chapter','所有需求章节'],['#filter-req-type','req_type','所有需求类型']];
+  for(const [selector,field,label] of definitions){const node=$(selector),current=node.value,values=ForgeRequirements.filterValues(state.issues,field);node.innerHTML=`<option value="">${label}</option>`+values.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');if(values.includes(current))node.value=current;}
+  const missingNode=$('#filter-req-missing'),currentMissing=missingNode.value,missingValues=[...new Set(state.issues.flatMap(i=>Array.isArray(i.requirement?.missing)?i.requirement.missing:[]))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
+  missingNode.innerHTML='<option value="">所有字段完整度</option>'+missingValues.map(value=>`<option value="${esc(value)}">缺失：${esc(value)}</option>`).join('');if(missingValues.includes(currentMissing))missingNode.value=currentMissing;
+  document.querySelectorAll('.requirement-filter').forEach(node=>node.hidden=!state.issues.some(i=>i.requirement));
 }
 function render() {
   $('#project-select').innerHTML=state.projects.length?state.projects.map(p=>`<option value="${esc(p.key)}" ${p.key===project?'selected':''}>${esc(p.name)}</option>`).join(''):'<option>创建你的项目</option>';
@@ -64,17 +72,22 @@ function render() {
   const filter=$('#filter-sprint').value;
   $('#filter-sprint').innerHTML='<option value="">所有迭代</option><option value="none">未排期</option>'+state.sprints.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
   if([...$('#filter-sprint').options].some(o=>o.value===filter))$('#filter-sprint').value=filter;
+  updateRequirementFilters();
   renderContent();
 }
 function card(item) {
-  return `<article class="card" draggable="true" data-key="${esc(item.key)}" tabindex="0" role="button" aria-label="打开 ${esc(item.key)} ${esc(item.title)}"><div class="card-top"><span>${typeBadge(item)}${esc(item.key)}</span><span class="priority ${item.priority}">${item.priority==='critical'?'⇈':'↑'} ${priorityNames[item.priority]}</span></div><div class="card-title">${esc(item.title)}</div><div class="tags">${item.labels.map(l=>`<span class="tag">${esc(l)}</span>`).join('')}</div><div class="card-bottom"><span class="card-person"><span class="avatar">${esc(item.assignee?item.assignee.slice(0,1):'–')}</span>${esc(item.assignee||'未分配')}</span><span class="points">${item.points} SP</span></div></article>`;
+  return `<article class="card" draggable="true" data-key="${esc(item.key)}" tabindex="0" role="button" aria-label="打开 ${esc(item.key)} ${esc(item.title)}"><div class="card-top"><span>${typeBadge(item)}${esc(item.key)}</span><span class="priority ${esc(item.priority)}">${item.priority==='critical'?'⇈':'↑'} ${item.requirement?'工作项调度：':''}${priorityNames[item.priority]}</span></div><div class="card-title">${esc(item.title)}</div>${ForgeRequirements.cardMeta(item)}<div class="tags">${item.labels.map(l=>`<span class="tag">${esc(l)}</span>`).join('')}</div><div class="card-bottom"><span class="card-person"><span class="avatar">${esc(item.assignee?item.assignee.slice(0,1):'–')}</span>${esc(item.assignee||'未分配')}</span><span class="points">${item.points} SP</span></div></article>`;
 }
 function empty(title,body,action,label) {return `<div class="empty-state"><h3>${esc(title)}</h3><p>${esc(body)}</p>${action?`<button class="primary" data-action="${action}">${esc(label)}</button>`:''}</div>`;}
 function renderContent() {
   if(!state.projects.length){$('#content').innerHTML=empty('从一个项目开始','创建项目后，即可管理工作项、迭代与版本。','new-project','＋ 创建项目');return;}
   const items=filtered();$('#filtered-count').textContent=`${items.length} 个工作项`;
-  if(view==='board')$('#content').innerHTML=`<div class="board">${Object.entries(statusNames).map(([status,name])=>{const group=items.filter(i=>i.status===status);return `<section class="column" data-status="${status}" aria-label="${name}"><div class="column-head"><span class="column-dot"></span>${name}<span class="count">${group.length}</span><button data-action="new-issue" data-status="${status}" aria-label="在${name}创建工作项">＋</button></div>${group.map(card).join('')}${!group.length?'<div class="column-empty">将工作项拖到这里</div>':''}</section>`;}).join('')}</div>`;
-  if(view==='backlog')$('#content').innerHTML=items.length?`<div class="list-table"><table><thead><tr><th>工作项</th><th>标题</th><th>状态</th><th>优先级</th><th>负责人</th><th>迭代</th><th>故事点</th></tr></thead><tbody>${items.map(i=>`<tr data-key="${esc(i.key)}" tabindex="0" role="button" aria-label="打开 ${esc(i.key)}"><td>${typeBadge(i)}${esc(i.key)}</td><td class="title-cell">${esc(i.title)}</td><td><span class="pill">${statusNames[i.status]}</span></td><td class="priority ${i.priority}">${priorityNames[i.priority]}</td><td>${esc(i.assignee||'未分配')}</td><td>${esc(state.sprints.find(s=>s.id===i.sprint_id)?.name||'未排期')}</td><td>${i.points}</td></tr>`).join('')}</tbody></table></div>`:empty('没有匹配的工作项','试试调整筛选条件，或创建一个新任务。','new-issue','创建工作项');
+  if(view==='board')$('#content').innerHTML=`<div class="board">${Object.entries(statusNames).map(([status,name])=>{const group=items.filter(i=>i.status===status),visible=boardVisible[status]||30,windowed=ForgeRequirements.boardSlice(group,visible);return `<section class="column" data-status="${status}" aria-label="${name}"><div class="column-head"><span class="column-dot"></span>${name}<span class="count">${group.length}</span><button data-action="new-issue" data-status="${status}" aria-label="在${name}创建工作项">＋</button></div>${windowed.items.map(card).join('')}${!group.length?'<div class="column-empty">将工作项拖到这里</div>':''}${windowed.hasMore?`<button class="board-show-more" data-action="show-more-requirements" data-status="${status}">再显示 ${Math.min(30,windowed.remaining)} 项 · 尚有 ${windowed.remaining} 项</button>`:''}</section>`;}).join('')}</div>`;
+  if(view==='backlog'){
+    const page=ForgeRequirements.paginate(items,requirementPage,50),hasRequirements=items.some(i=>i.requirement),requirementHead=hasRequirements?'<th>原需求编号</th><th>需求系统</th><th>需求评估</th>':'';
+    requirementPage=page.page;
+    $('#content').innerHTML=items.length?`<div class="list-table"><table><thead><tr><th>工作项</th><th>标题</th>${requirementHead}<th>工作项状态</th><th>工作项调度优先级</th><th>负责人</th><th>迭代</th><th>故事点</th></tr></thead><tbody>${page.items.map(i=>`<tr data-key="${esc(i.key)}" tabindex="0" role="button" aria-label="打开 ${esc(i.key)}"><td>${typeBadge(i)}${esc(i.key)}</td><td class="title-cell">${esc(i.title)}</td>${hasRequirements?(ForgeRequirements.listCells(i)||'<td>—</td><td>—</td><td>—</td>'):''}<td><span class="pill">${statusNames[i.status]}</span></td><td class="priority ${esc(i.priority)}">${priorityNames[i.priority]}</td><td>${esc(i.assignee||'未分配')}</td><td>${esc(state.sprints.find(s=>s.id===i.sprint_id)?.name||'未排期')}</td><td>${i.points}</td></tr>`).join('')}</tbody></table></div>${ForgeRequirements.pager(page)}`:empty('没有匹配的工作项','试试调整筛选条件，或创建一个新任务。','new-issue','创建工作项');
+  }
   if(view==='sprints') renderSprints();
   if(view==='analytics') {
     if(!Object.hasOwn(state.analytics||{},analysisScope))analysisScope='active';
@@ -119,7 +132,8 @@ function openEditor(kind,item=null,initialStatus='backlog') {
 async function openIssue(key) {
   try {
     const i=await api('issue.get',{key});selectedIssue=i;
-    $('#detail-content').innerHTML=`<div class="dialog-header"><div><small>${typeBadge(i)} ${esc(i.key)} · ${typeNames[i.type]}</small></div><button class="icon-button" data-close="detail" aria-label="关闭详情">×</button></div><div class="detail-body"><div class="detail-title">${esc(i.title)}</div><div class="detail-description">${esc(i.description||'尚未添加描述')}</div><div class="detail-facts"><div><small>状态</small><span>${statusNames[i.status]}</span></div><div><small>负责人</small><span>${esc(i.assignee||'未分配')}</span></div><div><small>优先级</small><span>${priorityNames[i.priority]}</span></div><div><small>故事点</small><span>${i.points} SP</span></div><div><small>迭代</small><span>${esc(state.sprints.find(s=>s.id===i.sprint_id)?.name||'未排期')}</span></div><div><small>截止日期</small><span>${esc(i.due_date||'未设置')}</span></div></div><div class="tags">${i.labels.map(l=>`<span class="tag">${esc(l)}</span>`).join('')}</div><div class="detail-actions"><select id="detail-status" aria-label="工作项状态">${opts(statusNames,i.status)}</select><button class="secondary" data-action="edit-issue">编辑工作项</button></div><h3>评论 · ${i.comments.length}</h3>${i.comments.map(c=>`<div class="comment"><small>${esc(c.actor)} · ${dateText(c.created_at)}</small><p>${esc(c.body)}</p></div>`).join('')}<form class="comment-form" id="comment-form"><input name="body" placeholder="留下评论，与团队同步进展…" aria-label="评论内容" required><button class="primary">发送</button></form><h3>最近活动</h3>${i.activity.slice(0,8).map(activityRow).join('')}</div>`;
+    const requirementDetail=i.requirement?ForgeRequirements.renderDetail({...i.requirement,key:i.key},i.key):'';
+    $('#detail-content').innerHTML=`<div class="dialog-header"><div><small>${typeBadge(i)} ${esc(i.key)} · ${typeNames[i.type]}</small></div><button class="icon-button" data-close="detail" aria-label="关闭详情">×</button></div><div class="detail-body"><div class="detail-title">${esc(i.title)}</div><div class="detail-description">${esc(i.description||'尚未添加描述')}</div><div class="detail-facts"><div><small>工作项状态</small><span>${statusNames[i.status]}</span></div><div><small>负责人</small><span>${esc(i.assignee||'未分配')}</span></div><div><small>工作项调度优先级</small><span>${priorityNames[i.priority]}</span></div><div><small>故事点</small><span>${i.points} SP</span></div><div><small>迭代</small><span>${esc(state.sprints.find(s=>s.id===i.sprint_id)?.name||'未排期')}</span></div><div><small>截止日期</small><span>${esc(i.due_date||'未设置')}</span></div></div><div class="tags">${i.labels.map(l=>`<span class="tag">${esc(l)}</span>`).join('')}</div><div class="detail-actions"><select id="detail-status" aria-label="工作项状态">${opts(statusNames,i.status)}</select><button class="secondary" data-action="edit-issue">编辑工作项</button></div>${requirementDetail}<h3>评论 · ${i.comments.length}</h3>${i.comments.map(c=>`<div class="comment"><small>${esc(c.actor)} · ${dateText(c.created_at)}</small><p>${esc(c.body)}</p></div>`).join('')}<form class="comment-form" id="comment-form"><input name="body" placeholder="留下评论，与团队同步进展…" aria-label="评论内容" required><button class="primary">发送</button></form><h3>最近活动</h3>${i.activity.slice(0,8).map(activityRow).join('')}</div>`;
     if(!$('#detail').open)$('#detail').showModal();
     $('#detail-status').onchange=async e=>{try{await api('issue.update',{key:i.key,status:e.target.value,version:i.version});toast('状态已更新');await refresh();await openIssue(i.key);}catch(err){toast(err.message,true);await openIssue(i.key);}};
     $('#comment-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget;form.querySelector('button').disabled=true;try{await api('issue.comment',{key:i.key,body:new FormData(form).get('body')});await openIssue(i.key);toast('评论已发送');await refresh();}catch(err){toast(err.message,true);form.querySelector('button').disabled=false;}};
@@ -140,6 +154,23 @@ $('#edit-form').onsubmit=async e=>{
   } catch(error){$('#form-error').textContent=error.message;}
   finally{$('#save').disabled=false;}
 };
+function changedFormValues(form){const values={};for(const control of form.querySelectorAll('[name]'))if(control.value!==control.dataset.original)values[control.name]=control.value;return values;}
+async function saveRequirementForm(form,scenario=false){
+  const button=form.querySelector('button[type="submit"]'),errorNode=form.querySelector('.requirement-form-error'),values=changedFormValues(form);
+  if(!Object.keys(values).length){toast('没有需要保存的变更');return;}
+  button.disabled=true;errorNode.textContent='';
+  try{
+    const payload=scenario?ForgeRequirements.scenarioUpdatePayload(form.dataset.key,form.dataset.scenarioCode,form.dataset.version,values):ForgeRequirements.updatePayload(form.dataset.key,form.dataset.version,values);
+    await api(scenario?'requirement.scenario.update':'requirement.update',payload);
+    toast(scenario?'场景已保存，待复核状态已同步':'需求分析已保存');
+    await refresh();await openIssue(form.dataset.key);
+  }catch(error){errorNode.textContent=`保存失败：${error.message}。若为版本冲突，请刷新详情后重新确认变更。`;button.disabled=false;}
+}
+document.addEventListener('submit',e=>{const requirementForm=e.target.closest('[data-requirement-form]'),scenarioForm=e.target.closest('[data-scenario-form]');if(!requirementForm&&!scenarioForm)return;e.preventDefault();void saveRequirementForm(requirementForm||scenarioForm,Boolean(scenarioForm));});
+function downloadRequirementExport(payload,sourceId){
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');
+  link.href=url;link.download=`forge-requirements-${String(sourceId||'snapshot').replace(/[^a-zA-Z0-9._-]/g,'_')}.json`;document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
+}
 async function handleAction(button) {
   const action=button.dataset.action;
   if(action==='show-analytics'){view='analytics';analysisScope='project';analysisRisk='all';syncLocation();return render();}
@@ -151,6 +182,13 @@ async function handleAction(button) {
   if(action==='edit-release')return openEditor('release',state.releases.find(r=>r.id===Number(button.dataset.id)));
   if(action==='edit-issue')return openEditor('issue',selectedIssue);
   if(action==='open-issue')return openIssue(button.dataset.issue);
+  if(action==='requirements-page'){requirementPage=Number(button.dataset.page)||1;renderContent();return;}
+  if(action==='show-more-requirements'){const status=button.dataset.status;boardVisible[status]=(boardVisible[status]||30)+30;renderContent();return;}
+  if(action==='export-requirement'){
+    button.disabled=true;
+    try{const result=await api('requirement.export',{source_id:button.dataset.sourceId});downloadRequirementExport(result,button.dataset.sourceId);toast('完整来源 JSON 已导出');}catch(error){toast(error.message,true);}finally{button.disabled=false;}
+    return;
+  }
   if(action==='show-sprints'){view='sprints';return render();}
   if(action==='copy'){try{await navigator.clipboard.writeText(button.dataset.text);toast('已复制，请粘贴到 Codex 对话');}catch{toast('复制不可用，请直接选择提示词文本',true);}return;}
   button.disabled=true;
@@ -165,13 +203,13 @@ document.addEventListener('click',e=>{
   const close=e.target.closest('[data-close]');if(close)return $('#'+close.dataset.close).close();
   const nav=e.target.closest('[data-view]');if(nav){view=nav.dataset.view;syncLocation();if(state)render();return;}
   const action=e.target.closest('[data-action]');if(action)return void handleAction(action);
-  const card=e.target.closest('[data-key]');if(card)openIssue(card.dataset.key);
+  const card=e.target.closest('.card[data-key],tr[data-key]');if(card)openIssue(card.dataset.key);
 });
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('[data-key]'))openIssue(e.target.dataset.key);});
-$('#project-select').onchange=async e=>{project=e.target.value;analysisScope='active';analysisRisk='all';$('#search').value='';$('#filter-sprint').value='';syncLocation();await refresh();};
+$('#project-select').onchange=async e=>{project=e.target.value;analysisScope='active';analysisRisk='all';requirementPage=1;boardVisible={};$('#search').value='';$('#filter-sprint').value='';['#filter-req-system','#filter-req-chapter','#filter-req-type','#filter-req-missing'].forEach(selector=>$(selector).value='');syncLocation();await refresh();};
 document.addEventListener('change',e=>{if(e.target.id==='analysis-scope'){analysisScope=e.target.value;analysisRisk='all';syncLocation();renderContent();}if(e.target.id==='analysis-risk'){analysisRisk=e.target.value;renderContent();}});
 $('#new-project').onclick=()=>openEditor('project');$('#new-issue').onclick=()=>openEditor('issue');$('#refresh').onclick=refresh;
-['#search','#filter-type','#filter-priority','#filter-sprint'].forEach(s=>$(s).addEventListener(s==='#search'?'input':'change',()=>{if(state)renderContent();}));
+['#search','#filter-type','#filter-priority','#filter-sprint','#filter-req-system','#filter-req-chapter','#filter-req-type','#filter-req-missing'].forEach(s=>$(s).addEventListener(s==='#search'?'input':'change',()=>{requirementPage=1;boardVisible={};if(state)renderContent();}));
 let draggedKey=null;
 document.addEventListener('dragstart',e=>{const card=e.target.closest('.card');if(card){draggedKey=card.dataset.key;e.dataTransfer.setData('text/plain',draggedKey);e.dataTransfer.effectAllowed='move';}});
 document.addEventListener('dragover',e=>{const col=e.target.closest('.column');if(col&&draggedKey){e.preventDefault();col.classList.add('drop-over');}});

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Forge · 研发工作台</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/analytics.css">
+  <title>Forge · 研发工作台</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/analytics.css"><link rel="stylesheet" href="/requirements.css">
 </head>
 <body>
   <aside class="sidebar">
@@ -29,7 +29,7 @@
       <div id="metrics" class="metrics"></div>
       <section id="management-pulse"></section>
       <section id="sprint-banner" class="sprint-banner"></section>
-      <div id="filters" class="filters"><div class="search-wrap"><span>⌕</span><input id="search" type="search" placeholder="搜索工作项、编号或描述…" aria-label="搜索工作项"></div><select id="filter-type" aria-label="筛选类型"><option value="">所有类型</option><option value="story">用户故事</option><option value="task">任务</option><option value="bug">缺陷</option><option value="epic">史诗</option></select><select id="filter-priority" aria-label="筛选优先级"><option value="">所有优先级</option><option value="critical">最高</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select><select id="filter-sprint" aria-label="筛选迭代"><option value="">所有迭代</option></select><button id="refresh" class="secondary" aria-label="刷新">↻ 刷新</button><span class="filtered-count" id="filtered-count"></span></div>
+      <div id="filters" class="filters"><div class="search-wrap"><span>⌕</span><input id="search" type="search" placeholder="搜索工作项、原需求编号、系统或描述…" aria-label="搜索工作项和原需求"></div><select id="filter-type" aria-label="筛选工作项类型"><option value="">所有工作项类型</option><option value="story">用户故事</option><option value="task">任务</option><option value="bug">缺陷</option><option value="epic">史诗</option></select><select id="filter-priority" aria-label="筛选工作项调度优先级"><option value="">所有调度优先级</option><option value="critical">最高</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select><select id="filter-sprint" aria-label="筛选迭代"><option value="">所有迭代</option></select><select id="filter-req-system" class="requirement-filter" aria-label="筛选需求系统"><option value="">所有需求系统</option></select><select id="filter-req-chapter" class="requirement-filter" aria-label="筛选需求章节"><option value="">所有需求章节</option></select><select id="filter-req-type" class="requirement-filter" aria-label="筛选需求类型"><option value="">所有需求类型</option></select><select id="filter-req-missing" class="requirement-filter" aria-label="筛选缺失源字段"><option value="">所有字段完整度</option></select><button id="refresh" class="secondary" aria-label="刷新">↻ 刷新</button><span class="filtered-count" id="filtered-count"></span></div>
       <div id="content" aria-live="polite"><div class="empty-state">正在连接本地工作台…</div></div>
       <footer><span><i class="live-dot"></i> SQLite 持久化 · 网页与 CLI 实时同步</span><span id="last-update"></span></footer>
     </main>
@@ -37,6 +37,6 @@
   <dialog id="editor"><form id="edit-form"><div class="dialog-header"><div><small id="form-kicker">FORGE / WORK ITEM</small><h2 id="form-title">创建工作项</h2></div><button type="button" class="icon-button" data-close="editor" aria-label="关闭">×</button></div><div id="form-fields" class="form-fields"></div><p class="form-error" id="form-error" role="alert"></p><div class="dialog-footer"><button type="button" class="secondary" data-close="editor">取消</button><button class="primary" type="submit" id="save">保存</button></div></form></dialog>
   <dialog id="detail"><div id="detail-content"></div></dialog>
   <div id="toast" role="status"></div>
-  <script src="/analytics.js"></script><script src="/app.js"></script>
+  <script src="/analytics.js"></script><script src="/requirements.js"></script><script src="/app.js"></script>
 </body>
 </html>
