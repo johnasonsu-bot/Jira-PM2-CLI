@@ -78,6 +78,8 @@ class Store:
                     issue_keys TEXT NOT NULL, created_at TEXT NOT NULL, released_at TEXT,
                     UNIQUE(project, name));
             ''')
+            from .requirements import initialize
+            initialize(db)
 
     def connect(self):
         db = sqlite3.connect(self.path, timeout=15)
@@ -86,6 +88,7 @@ class Store:
         return db
 
     def call(self, action, data=None, actor='local'):
+        from .requirements import Requirements
         handlers = {
             'project.list': self.projects, 'project.create': self.create_project,
             'issue.list': self.issues, 'issue.create': self.create_issue,
@@ -97,6 +100,7 @@ class Store:
             'activity.list': self.activity, 'report.summary': self.summary,
             'report.analytics': self.analytics,
         }
+        handlers.update(Requirements(self).handlers())
         if not isinstance(action, str) or action not in handlers:
             raise DomainError('未知操作')
         if data is None:
@@ -154,7 +158,7 @@ class Store:
         for name, values in [('status', STATUSES), ('type', TYPES), ('priority', PRIORITIES)]:
             if name in fields and fields[name] not in values:
                 raise DomainError(f'{name} 必须是：' + ', '.join(values))
-        for name, limit in [('title', 240), ('description', 10000), ('assignee', 100)]:
+        for name, limit in [('title', 240), ('description', 100000), ('assignee', 100)]:
             if name in fields:
                 fields[name] = text(fields[name], name, name == 'title', limit)
         if 'points' in fields:
@@ -200,6 +204,11 @@ class Store:
         if d.get('q'):
             q = text(d['q'], '搜索', limit=240).casefold()
             items = [i for i in items if q in (i['key'] + ' ' + i['title'] + ' ' + i['description']).casefold()]
+        from .requirements import Requirements
+        summaries = Requirements(self).summaries(db, d.get('project'))
+        for item in items:
+            if item['key'] in summaries:
+                item['requirement'] = summaries[item['key']]
         return items
 
     def get_issue(self, db, d, actor):
@@ -207,6 +216,9 @@ class Store:
         item = self.row(db, 'issues', d.get('key'))
         item['comments'] = [dict(r) for r in db.execute('SELECT * FROM comments WHERE issue_key=? ORDER BY id', (item['key'],))]
         item['activity'] = self.activity(db, {'target': item['key']}, actor)
+        if db.execute('SELECT 1 FROM requirement_links WHERE issue_key=?',(item['key'],)).fetchone():
+            from .requirements import Requirements
+            item['requirement'] = Requirements(self).get(db, {'key':item['key']},actor)
         return item
 
     def update_issue(self, db, d, actor):

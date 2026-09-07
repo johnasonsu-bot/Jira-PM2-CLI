@@ -52,7 +52,9 @@ PM2_BIN="$(command -v pm2)" node pm2/agent-harness/dashboard/server.js
 
 ## Codex 对话操作
 
-本地 MCP 已提供五个只读工具，支持结构化工作量排名。安装额外依赖 `pip install -e 'devops/agent-harness[dev,mcp]'`，并按 [MCP 接入指南](docs/MCP.md) 注册到 Codex。MCP 按需启动，无额外监听端口。
+本地 MCP 提供八个只读工具，支持结构化工作量排名和导入需求的原文、GWT 场景及完备率查询。安装额外依赖 `pip install -e 'devops/agent-harness[dev,mcp]'`，并按 [MCP 接入指南](docs/MCP.md) 注册到 Codex。MCP 按需启动，无额外监听端口。
+
+工作项与看板已支持来源需求编号、系统/章节/需求类型筛选、完整原文追溯、带版本保护的分析补充和 GWT 复核。原始档案不覆盖，业务数据不进入本仓库，详见[需求整合说明](docs/REQUIREMENTS.md)。
 
 向 Codex 指定 [Forge Skill](skills/cli-anything-devops/SKILL.md)，并确保 `cli-anything-devops` 在 PATH 中。例如：“列出项目，分析 Forge 当前迭代的逾期和高优先级工作项”。对话发生在 Codex 中，网页没有内嵌聊天模型，也不需要模型 API Key。
 

@@ -34,4 +34,5 @@ class Backend:
             raise ValueError(f'无法连接 {self.url}，请先运行 forge-devops-server') from None
 
     def call(self, action, data):
-        return self.request('/api/call', {'action': action, 'data': data})['data']
+        path = '/api/requirements/import' if action == 'requirement.import' else '/api/call'
+        return self.request(path, {'action': action, 'data': data})['data']

@@ -99,7 +99,8 @@ def test_stdio_tools_use_live_api_and_cannot_mutate(api):
                 await session.initialize()
                 catalog = await session.list_tools()
                 assert {t.name for t in catalog.tools} == {
-                    'health', 'list_projects', 'get_analytics', 'rank_workload', 'get_issue'}
+                    'health', 'list_projects', 'get_analytics', 'rank_workload', 'get_issue',
+                    'list_requirements', 'get_requirement', 'get_requirement_report'}
                 assert all(t.annotations.readOnlyHint for t in catalog.tools)
                 health = await session.call_tool('health', {})
                 assert not health.isError and health.structuredContent['ok']

@@ -63,6 +63,8 @@ def make_server(db_path, port=8766):
                 assets = {'/': ('index.html', 'text/html; charset=utf-8'), '/app.js': ('app.js', 'text/javascript; charset=utf-8'), '/styles.css': ('styles.css', 'text/css; charset=utf-8')}
                 assets.update({'/analytics.js': ('analytics.js','text/javascript; charset=utf-8'),
                                '/analytics.css': ('analytics.css','text/css; charset=utf-8')})
+                assets.update({'/requirements.js':('requirements.js','text/javascript; charset=utf-8'),
+                               '/requirements.css':('requirements.css','text/css; charset=utf-8')})
                 if url.path in assets:
                     name, mime = assets[url.path]
                     return self.send(200, (WEB / name).read_bytes(), mime)
@@ -76,13 +78,14 @@ def make_server(db_path, port=8766):
         def do_POST(self):
             try:
                 self.guard(write=True)
-                if self.path != '/api/call':
+                bulk = self.path == '/api/requirements/import'
+                if self.path not in ('/api/call','/api/requirements/import'):
                     raise DomainError('接口不存在', 404)
                 if self.headers.get('Transfer-Encoding'):
                     raise DomainError('不支持分块请求')
                 length = int(self.headers.get('Content-Length', '0'))
                 self.connection.settimeout(2)
-                if not 0 < length <= 65536:
+                if not 0 < length <= (32 * 1024 * 1024 if bulk else 65536):
                     # Drain a bounded small over-limit body before closing, so the
                     # client receives HTTP 413 instead of a TCP reset on macOS.
                     if 0 < length <= 131072:
@@ -92,6 +95,8 @@ def make_server(db_path, port=8766):
                 body = json.loads(self.rfile.read(length))
                 if not isinstance(body, dict) or set(body) - {'action', 'data'}:
                     raise DomainError('请求必须包含 action 和 data 对象')
+                if bulk and body.get('action') != 'requirement.import':
+                    raise DomainError('此接口仅接受需求导入')
                 result = store.call(body.get('action'), body.get('data'), unquote(self.headers.get('X-Forge-Actor', '网页')))
                 self.send(200, {'data': result})
             except DomainError as exc:

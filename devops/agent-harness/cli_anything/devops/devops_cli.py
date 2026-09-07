@@ -69,6 +69,77 @@ def project_create(ctx, **data):
 def issue():
     """Stories, tasks, bugs and epics."""
 
+@cli.group()
+def requirement():
+    """需求来源、完整导入导出和带版本保护的分析补充。"""
+
+@requirement.command('import')
+@click.option('--file', 'input_file', required=True, type=click.File('r', encoding='utf-8'))
+@click.pass_context
+def requirement_import(ctx, input_file):
+    """导入完整快照；相同文件重试不覆盖已有分析或工作项。"""
+    try:
+        bundle = json.load(input_file)
+    except (ValueError, UnicodeError) as exc:
+        raise click.ClickException('导入文件不是有效 UTF-8 JSON') from exc
+    emit(ctx, 'requirement.import', {'bundle':bundle})
+
+@requirement.command('get')
+@click.argument('key')
+@click.pass_context
+def requirement_get(ctx, key):
+    emit(ctx, 'requirement.get', {'key':key})
+
+@requirement.command('list')
+@click.option('--project', required=True)
+@click.option('--search', 'q', default='')
+@click.option('--system')
+@click.option('--chapter')
+@click.option('--req-type')
+@click.option('--missing')
+@click.option('--limit', default=50, type=int)
+@click.option('--offset', default=0, type=int)
+@click.pass_context
+def requirement_list(ctx, **data):
+    emit(ctx, 'requirement.list', {k:v for k,v in data.items() if v is not None})
+
+@requirement.command('report')
+@click.option('--project', required=True)
+@click.pass_context
+def requirement_report(ctx, project):
+    emit(ctx, 'requirement.report', {'project':project})
+
+@requirement.command('export')
+@click.option('--source-id', required=True)
+@click.pass_context
+def requirement_export(ctx, source_id):
+    """输出原始完整快照及全部分析覆盖层 JSON（不修改原始来源）。"""
+    emit(ctx, 'requirement.export', {'source_id':source_id})
+
+def read_analysis_fields(input_file):
+    try:
+        return json.load(input_file)
+    except (ValueError, UnicodeError) as exc:
+        raise click.ClickException('字段文件不是有效 UTF-8 JSON') from exc
+
+@requirement.command('update')
+@click.argument('key')
+@click.option('--version', required=True, type=int)
+@click.option('--fields-file', required=True, type=click.File('r', encoding='utf-8'))
+@click.pass_context
+def requirement_update(ctx, key, version, fields_file):
+    emit(ctx, 'requirement.update', {'key':key,'version':version,'fields':read_analysis_fields(fields_file)})
+
+@requirement.command('scenario-update')
+@click.argument('key')
+@click.argument('scenario_code')
+@click.option('--version', required=True, type=int)
+@click.option('--fields-file', required=True, type=click.File('r', encoding='utf-8'))
+@click.pass_context
+def requirement_scenario_update(ctx, key, scenario_code, version, fields_file):
+    emit(ctx, 'requirement.scenario.update', {'key':key,'scenario_code':scenario_code,
+        'version':version,'fields':read_analysis_fields(fields_file)})
+
 @issue.command('list')
 @click.option('--project')
 @click.option('--status', type=click.Choice(STATUSES))

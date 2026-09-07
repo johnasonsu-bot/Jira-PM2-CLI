@@ -35,6 +35,9 @@ Codex 的本地客户端共用 MCP 配置。已打开的会话若未发现新工
 | get_analytics | 读取项目或迭代的完整管理指标 |
 | rank_workload | 按当前未完成工作量排名 |
 | get_issue | 查询工作项及评论，不能修改 |
+| list_requirements | 分页检索关联需求的工作项及原需求编号 |
+| get_requirement | 读取完整原始需求、分析覆盖层及 GWT 场景 |
+| get_requirement_report | 查询 11 个源字段完备率、系统/类型分布及场景复核数量 |
 
 所有工具为只读；不存在通用 action、Shell、SQL、文件工具或 PM2 操作工具。原 CLI 的写操作能力不经此 MCP 暴露。
 
@@ -63,6 +66,6 @@ python -m pytest devops/agent-harness/cli_anything/devops/tests/test_mcp.py -q
 
 ## 安全边界
 
-仅供可信本机单用户使用，不做公网部署。MCP 读取的业务数据会进入用户正在使用的 Codex 会话，按该客户端的模型和数据策略处理；“本地 MCP”不代表模型离线运行。工具的只读注解是提示，真正的限制来自五个固定处理函数和回环 Backend。项目无多用户授权、查询审计或完整依赖锁定；不要当作已完成生产安全认证。
+仅供可信本机单用户使用，不做公网部署。MCP 读取的业务数据会进入用户正在使用的 Codex 会话，按该客户端的模型和数据策略处理；“本地 MCP”不代表模型离线运行。工具的只读注解是提示，真正的限制来自八个固定处理函数和回环 Backend。项目无多用户授权、查询审计或完整依赖锁定；不要当作已完成生产安全认证。
 
 参考：[Codex MCP 官方配置](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)、[MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk/tree/v1.x)。
