@@ -138,7 +138,8 @@ class Requirements:
             original_codes.add(code)
         for row in bundle.get('scenarios', []):
             code = text(row.get('scenario_code'), '场景编号', True, 140)
-            if code in scenario_codes: raise DomainError('场景编号重复')
+            if code != row['scenario_code'] or code in scenario_codes:
+                raise DomainError('场景编号重复或含首尾空格')
             if not isinstance(row.get('req_code'),str) or row['req_code'] not in codes:
                 raise DomainError('存在无所属需求的场景')
             scenario_codes.add(code)

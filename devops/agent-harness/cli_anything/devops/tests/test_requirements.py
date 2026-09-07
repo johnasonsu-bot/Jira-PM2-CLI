@@ -98,6 +98,18 @@ def test_import_rejects_invalid_bundles_atomically(store, bundle, problem):
     assert len(store.call('issue.list')) == 1
 
 
+@pytest.mark.parametrize('scenario_code', [' P1-TAX-001-S01', 'P1-TAX-001-S01 '])
+def test_import_rejects_scenario_code_with_surrounding_whitespace_atomically(store, bundle, scenario_code):
+    bundle['scenarios'][0]['scenario_code'] = scenario_code
+    before_projects = store.call('project.list')
+    before_issue = store.call('issue.get', {'key':'APP-1'})
+    with pytest.raises(DomainError, match='场景编号'):
+        imported(store, bundle)
+    assert store.call('project.list') == before_projects
+    assert store.call('issue.get', {'key':'APP-1'}) == before_issue
+    assert len(store.call('issue.list')) == 1
+
+
 def test_analysis_updates_are_separate_from_raw_and_have_optimistic_lock(store, bundle):
     imported(store, bundle)
     updated = store.call('requirement.update', {'key':'P1-1','version':1,'fields':{
