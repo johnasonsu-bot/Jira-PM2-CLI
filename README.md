@@ -6,6 +6,8 @@
 
 代码边界与验收证据：[CLI、DevOps 与 MCP 分离情况](docs/CLI-DEVOPS-MCP-EVIDENCE.md)（独立入口及 HTTP 通信，Forge 三个入口仍同包发布）。
 
+三件套交付记录：[服务、DevOps 与 MCP 代码证据](docs/DELIVERY-CODE-EVIDENCE.md)。重新构建 Wheel 与安全更新本机服务见 [本地构建说明](docs/LOCAL-BUILD.md)。
+
 ## 功能
 
 - 项目、工作项、五列看板、评论与变更审计。
