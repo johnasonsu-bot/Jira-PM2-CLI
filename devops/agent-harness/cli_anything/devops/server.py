@@ -54,7 +54,10 @@ def make_server(db_path, port=8766):
                     projects = store.call('project.list')
                     project = parse_qs(url.query).get('project', [projects[0]['key'] if projects else ''])[0]
                     if project and project not in {p['key'] for p in projects}:
-                        raise DomainError('项目不存在', 404)
+                        # Only a known hidden project URL falls back; typos remain 404.
+                        hidden = store.call('object.get',{'kind':'project','id':project,'include_deleted':True})
+                        if not hidden['deleted']: raise DomainError('项目不存在',404)
+                        project = projects[0]['key'] if projects else ''
                     state = {'projects': projects, 'project': project, 'statuses': STATUSES, 'types': TYPES, 'priorities': PRIORITIES}
                     for key, action in [('issues', 'issue.list'), ('sprints', 'sprint.list'), ('releases', 'release.list'), ('activity', 'activity.list'), ('summary', 'report.summary')]:
                         state[key] = store.call(action, {'project': project})
@@ -85,16 +88,23 @@ def make_server(db_path, port=8766):
                     raise DomainError('不支持分块请求')
                 length = int(self.headers.get('Content-Length', '0'))
                 self.connection.settimeout(2)
-                if not 0 < length <= (32 * 1024 * 1024 if bulk else 65536):
+                if not 0 < length <= (32 * 1024 * 1024 if bulk else 2 * 1024 * 1024):
                     # Drain a bounded small over-limit body before closing, so the
                     # client receives HTTP 413 instead of a TCP reset on macOS.
                     if 0 < length <= 131072:
                         self.rfile.read(length)
                     raise DomainError('请求体过大或为空', 413)
                 self.connection.settimeout(10)
-                body = json.loads(self.rfile.read(length))
+                try:
+                    body = json.loads(self.rfile.read(length))
+                except (ValueError,UnicodeError):
+                    if not bulk and length > 65536: raise DomainError('请求体过大或无效',413) from None
+                    raise
                 if not isinstance(body, dict) or set(body) - {'action', 'data'}:
                     raise DomainError('请求必须包含 action 和 data 对象')
+                if not bulk and length > 65536 and body.get('action') not in (
+                        'object.create','object.update','requirement.update','issue.create','issue.update'):
+                    raise DomainError('请求体过大',413)
                 if bulk and body.get('action') != 'requirement.import':
                     raise DomainError('此接口仅接受需求导入')
                 result = store.call(body.get('action'), body.get('data'), unquote(self.headers.get('X-Forge-Actor', '网页')))

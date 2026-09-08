@@ -80,6 +80,8 @@ class Store:
             ''')
             from .requirements import initialize
             initialize(db)
+            from .object_lifecycle import initialize as initialize_objects
+            initialize_objects(db)
 
     def connect(self):
         db = sqlite3.connect(self.path, timeout=15)
@@ -101,6 +103,8 @@ class Store:
             'report.analytics': self.analytics,
         }
         handlers.update(Requirements(self).handlers())
+        from .objects import ObjectService
+        handlers.update(ObjectService(self).handlers())
         if not isinstance(action, str) or action not in handlers:
             raise DomainError('未知操作')
         if data is None:
@@ -124,6 +128,9 @@ class Store:
         row = db.execute(f'SELECT * FROM {table} WHERE {field}=?', (value,)).fetchone()
         if row is None:
             raise DomainError(f'记录不存在：{value}', 404)
+        from .object_lifecycle import Lifecycle
+        kind = {'projects':'project','issues':'issue','sprints':'sprint','releases':'release','comments':'comment'}[table]
+        Lifecycle(db).require_visible(kind,str(value))
         return self.decode(row)
 
     @staticmethod
@@ -140,7 +147,10 @@ class Store:
 
     def projects(self, db, d, actor):
         only(d, [])
-        return [dict(r) for r in db.execute('SELECT key,name,description,created_at FROM projects ORDER BY created_at,key')]
+        from .object_lifecycle import Lifecycle
+        life = Lifecycle(db)
+        return [dict(r) for r in db.execute('SELECT key,name,description,created_at FROM projects ORDER BY created_at,key')
+                if life.visible('project',r['key'])]
 
     def create_project(self, db, d, actor):
         only(d, ('key', 'name', 'description'))
@@ -198,6 +208,9 @@ class Store:
     def issues(self, db, d, actor):
         only(d, ('project', 'q', 'status', 'type', 'priority', 'assignee', 'sprint_id'))
         items = [self.decode(r) for r in db.execute('SELECT * FROM issues ORDER BY updated_at DESC,rowid DESC')]
+        from .object_lifecycle import Lifecycle
+        life = Lifecycle(db)
+        items = [i for i in items if life.visible('issue',i['key'])]
         for key in ('project', 'status', 'type', 'priority', 'assignee', 'sprint_id'):
             if key in d:
                 items = [i for i in items if i[key] == d[key]]
@@ -214,7 +227,10 @@ class Store:
     def get_issue(self, db, d, actor):
         only(d, ('key',))
         item = self.row(db, 'issues', d.get('key'))
-        item['comments'] = [dict(r) for r in db.execute('SELECT * FROM comments WHERE issue_key=? ORDER BY id', (item['key'],))]
+        from .object_lifecycle import Lifecycle
+        life = Lifecycle(db)
+        item['comments'] = [dict(r) for r in db.execute('SELECT * FROM comments WHERE issue_key=? ORDER BY id', (item['key'],))
+                            if life.visible('comment',str(r['id']))]
         item['activity'] = self.activity(db, {'target': item['key']}, actor)
         if db.execute('SELECT 1 FROM requirement_links WHERE issue_key=?',(item['key'],)).fetchone():
             from .requirements import Requirements
@@ -244,13 +260,16 @@ class Store:
         item = self.row(db, 'issues', d.get('key'))
         body = text(d.get('body'), '评论', True)
         cur = db.execute('INSERT INTO comments(issue_key,body,actor,created_at) VALUES(?,?,?,?)', (item['key'], body, actor, now()))
-        self.log(db, item['project'], item['key'], 'issue.comment', actor, {'body': body})
+        self.log(db, item['project'], item['key'], 'issue.comment', actor,
+                 {'body': body,'kind':'comment','id':str(cur.lastrowid)})
         return self.row(db, 'comments', cur.lastrowid, 'id')
 
     def sprints(self, db, d, actor):
         only(d, ('project',))
         rows = [dict(r) for r in db.execute('SELECT * FROM sprints ORDER BY id DESC')]
-        return [r for r in rows if not d.get('project') or r['project'] == d['project']]
+        from .object_lifecycle import Lifecycle
+        life = Lifecycle(db)
+        return [r for r in rows if (not d.get('project') or r['project'] == d['project']) and life.visible('sprint',str(r['id']))]
 
     def create_sprint(self, db, d, actor):
         only(d, ('project', 'name', 'goal', 'start_date', 'end_date'))
@@ -279,6 +298,8 @@ class Store:
         if sprint['status'] != 'active':
             raise DomainError('只有进行中的迭代可以完成')
         unfinished = list(db.execute("SELECT key FROM issues WHERE sprint_id=? AND status!='done'", (sprint['id'],)))
+        from .object_lifecycle import Lifecycle
+        unfinished = [i for i in unfinished if Lifecycle(db).visible('issue',i['key'])]
         for item in unfinished:
             self.update_issue(db, {'key': item['key'], 'sprint_id': None, 'status': 'backlog'}, actor)
         db.execute("UPDATE sprints SET status='completed' WHERE id=?", (sprint['id'],))
@@ -288,7 +309,9 @@ class Store:
     def releases(self, db, d, actor):
         only(d, ('project',))
         rows = [self.decode(r) for r in db.execute('SELECT * FROM releases ORDER BY id DESC')]
-        return [r for r in rows if not d.get('project') or r['project'] == d['project']]
+        from .object_lifecycle import Lifecycle
+        life = Lifecycle(db)
+        return [r for r in rows if (not d.get('project') or r['project'] == d['project']) and life.visible('release',str(r['id']))]
 
     def release_keys(self, db, project, keys):
         if not isinstance(keys, list) or len(keys) > 500:
@@ -340,8 +363,13 @@ class Store:
         limit = integer(d.get('limit', 100), 'limit', 1, 500)
         filters = [(key, d[key]) for key in ('project', 'target') if key in d]
         where = ' WHERE ' + ' AND '.join(k + '=?' for k, _ in filters) if filters else ''
-        return [self.decode(r) for r in db.execute('SELECT * FROM activity' + where + ' ORDER BY id DESC LIMIT ?',
-                tuple(v for _, v in filters) + (limit,))]
+        from .object_lifecycle import Lifecycle
+        life = Lifecycle(db)
+        result = []
+        for row in db.execute('SELECT * FROM activity' + where + ' ORDER BY id DESC', tuple(v for _, v in filters)):
+            if life.audit_visible(row): result.append(self.decode(row))
+            if len(result) == limit: break
+        return result
 
     def summary(self, db, d, actor):
         only(d, ('project',))

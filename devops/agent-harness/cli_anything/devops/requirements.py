@@ -18,7 +18,8 @@ REQUIRED = {
     'deliverable':'交付物', 'workload_md':'工作量（人天）',
 }
 ANALYSIS_FIELDS = ('priority', 'acceptance_criteria', 'deliverable', 'workload_md',
-                   'related_systems', 'biz_owner', 'owner_side', 'status', 'remark')
+                   'related_systems', 'biz_owner', 'owner_side', 'status', 'remark',
+                   'req_name', 'req_desc', 'system_name', 'module_path', 'req_type')
 SCENARIO_FIELDS = ('title','given_text','when_text','then_text','scenario_type','status','remark')
 REVIEW_STATUSES = ('待评估', '已确认', '开发中', '已验收', '已否决')
 SCENARIO_STATUSES = ('待复核', '已确认', '已废弃')
@@ -91,6 +92,7 @@ class Requirements:
 
     def link(self, db, key):
         text(key, '工作项标识', True, 40)
+        self.store.row(db,'issues',key)
         row = db.execute('SELECT * FROM requirement_links WHERE issue_key=?', (key,)).fetchone()
         if row is None: raise DomainError('该工作项没有关联需求', 404)
         return dict(row)
@@ -197,10 +199,17 @@ class Requirements:
         if project is not None:
             query += ' WHERE i.project=?'
             params = (project,)
-        counts = {r['issue_key']:r for r in db.execute('''SELECT issue_key,
-            SUM(status<>'已废弃') count, SUM(status='已确认') confirmed FROM requirement_scenarios GROUP BY issue_key''')}
+        from .object_lifecycle import Lifecycle
+        life = Lifecycle(db)
+        counts = {}
+        for row in db.execute('SELECT issue_key,scenario_code,status FROM requirement_scenarios'):
+            if not life.visible('scenario',row['issue_key']+'::'+row['scenario_code']): continue
+            count = counts.setdefault(row['issue_key'],{'count':0,'confirmed':0})
+            count['count'] += row['status'] != '已废弃'
+            count['confirmed'] += row['status'] == '已确认'
         result = {}
         for link in db.execute(query, params):
+            if not life.visible('requirement',link['issue_key']): continue
             row = {**json.loads(link['raw']), **json.loads(link['fields'])}
             missing = missing_fields(row)
             count = counts.get(link['issue_key'], {'count':0,'confirmed':0})
@@ -218,11 +227,14 @@ class Requirements:
         current = {**raw, **json.loads(link['fields'])}
         snapshot = json.loads(db.execute('SELECT snapshot FROM requirement_imports WHERE source_id=?', (link['source_id'],)).fetchone()[0])
         summary = self.summaries(db, raw['project_code'])[link['issue_key']]
+        from .object_lifecycle import Lifecycle
+        life = Lifecycle(db)
         return {**summary,'source_id':link['source_id'],'raw':raw,'current':current,
                 'original':json.loads(link['original']) if link['original'] else None,
                 'version':link['version'], 'source':source_context(raw,snapshot.get('documents', {})),
                 'scenarios':[self.scenario(r) for r in db.execute(
-                    'SELECT * FROM requirement_scenarios WHERE issue_key=? ORDER BY scenario_code', (link['issue_key'],))]}
+                    'SELECT * FROM requirement_scenarios WHERE issue_key=? ORDER BY scenario_code', (link['issue_key'],))
+                    if life.visible('scenario',link['issue_key']+'::'+r['scenario_code'])]}
 
     def update(self, db, data, actor):
         only(data, ('key','version','fields'))
@@ -232,6 +244,22 @@ class Requirements:
         only(fields, ANALYSIS_FIELDS)
         integer(data.get('version'), '版本', 1, 2**31)
         if data['version'] != link['version']: raise DomainError('需求分析编辑冲突，请刷新后重试',409)
+        fields = self.validate_analysis(fields)
+        old = json.loads(link['fields'])
+        current = {**json.loads(link['raw']),**old}
+        changes = {k:{'before':current.get(k),'after':v} for k,v in fields.items() if current.get(k)!=v}
+        if changes:
+            db.execute('UPDATE requirement_links SET fields=?,version=version+1 WHERE issue_key=?',
+                       (encoded({**old,**fields}),link['issue_key']))
+            self.store.log(db,current['project_code'],link['issue_key'],'requirement.update',actor,changes)
+        synced = {target:fields[source] for source,target in (('req_name','title'),('req_desc','description')) if source in fields}
+        if synced: self.store.update_issue(db,{'key':link['issue_key'],**synced},actor)
+        return self.get(db,{'key':link['issue_key']},actor)
+
+    @staticmethod
+    def validate_analysis(fields):
+        only(fields,ANALYSIS_FIELDS)
+        fields = dict(fields)
         for key, value in fields.items():
             if key=='workload_md':
                 if value is not None:
@@ -244,21 +272,18 @@ class Requirements:
                 if value not in (None,'P0','P1','P2'): raise DomainError('需求优先级为 P0/P1/P2 或 null')
             elif key=='status':
                 if value not in REVIEW_STATUSES: raise DomainError('需求评估状态无效')
+            elif key in ('req_name','req_desc'):
+                fields[key] = text(value,key,key=='req_name',240 if key=='req_name' else 100000)
             elif value is not None:
                 text(value, key, limit=20000)
-        old = json.loads(link['fields'])
-        current = {**json.loads(link['raw']),**old}
-        changes = {k:{'before':current.get(k),'after':v} for k,v in fields.items() if current.get(k)!=v}
-        if changes:
-            db.execute('UPDATE requirement_links SET fields=?,version=version+1 WHERE issue_key=?',
-                       (encoded({**old,**fields}),link['issue_key']))
-            self.store.log(db,current['project_code'],link['issue_key'],'requirement.update',actor,changes)
-        return self.get(db,{'key':link['issue_key']},actor)
+        return fields
 
     def update_scenario(self, db, data, actor):
         only(data, ('key','scenario_code','version','fields'))
         link = self.link(db,data.get('key'))
         code = text(data.get('scenario_code'),'场景编号',True,140)
+        from .object_lifecycle import Lifecycle
+        Lifecycle(db).require_visible('scenario',link['issue_key']+'::'+code)
         row = db.execute('SELECT * FROM requirement_scenarios WHERE issue_key=? AND scenario_code=?', (link['issue_key'],code)).fetchone()
         if row is None: raise DomainError('该需求中没有此场景',404)
         integer(data.get('version'),'版本',1,2**31)
@@ -329,9 +354,19 @@ class Requirements:
         links = db.execute('SELECT * FROM requirement_links WHERE source_id=? ORDER BY issue_key',(source,)).fetchall()
         scenarios = db.execute('''SELECT s.* FROM requirement_scenarios s JOIN requirement_links r
             ON r.issue_key=s.issue_key WHERE r.source_id=? ORDER BY s.issue_key,s.scenario_code''',(source,)).fetchall()
+        from .object_lifecycle import Lifecycle
+        life = Lifecycle(db)
         return {'snapshot':json.loads(row['snapshot']),'digest':row['digest'],
                 'requirements':[{'key':r['issue_key'],'req_code':r['req_code'],'raw':json.loads(r['raw']),
                     'original':json.loads(r['original']) if r['original'] else None,
-                    'fields':json.loads(r['fields']),'version':r['version']} for r in links],
+                    'fields':json.loads(r['fields']),'version':r['version'],
+                    'deleted':not life.visible('requirement',r['issue_key']),
+                    'tombstone':life.state('requirement',r['issue_key'])} for r in links],
                 'scenarios':[{'key':r['issue_key'],'scenario_code':r['scenario_code'],'raw':json.loads(r['raw']),
-                    'fields':json.loads(r['fields']),'version':r['version']} for r in scenarios]}
+                    'fields':json.loads(r['fields']),'version':r['version'],
+                    'deleted':not life.visible('scenario',r['issue_key']+'::'+r['scenario_code']),
+                    'tombstone':life.state('scenario',r['issue_key']+'::'+r['scenario_code'])} for r in scenarios],
+                'tombstones':[dict(r) for r in db.execute('SELECT * FROM object_tombstones')
+                    if (r['kind']=='project' and r['object_id'] in {life.project('requirement',link['issue_key']) for link in links})
+                    or (r['kind']=='issue' and r['object_id'] in {link['issue_key'] for link in links})
+                    or (r['kind']=='scenario' and r['object_id'] in {s['issue_key']+'::'+s['scenario_code'] for s in scenarios})]}
