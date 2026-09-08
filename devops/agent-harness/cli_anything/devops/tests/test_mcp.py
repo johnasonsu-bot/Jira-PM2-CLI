@@ -93,7 +93,7 @@ def test_stdio_tools_use_live_api_and_cannot_mutate(api):
 
     async def run():
         params = StdioServerParameters(command=sys.executable,
-            args=['-m', 'cli_anything.devops.mcp_server', '--url', api.url])
+            args=['-m', 'cli_anything.devops.mcp_server', '--url', api.url, '--read-only'])
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()

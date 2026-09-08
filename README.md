@@ -13,6 +13,7 @@
 - 项目 / 当前迭代 / 指定迭代分析：12 项核心指标、数据完整性、风险清单、负责人工作量、版本门禁。
 - PM2 进程状态页面和受限命令输入；独立 PM2 CLI。
 - Forge HTTP CLI、JSON 输出、交互式 REPL 与 Codex Skill。
+- 七类业务对象的有限 CLI/MCP 写入：request ID 幂等、revision 并发保护、删除影响预览、可恢复 tombstone 与审计。
 
 ## 快速启动 Forge
 
@@ -54,7 +55,7 @@ PM2_BIN="$(command -v pm2)" node pm2/agent-harness/dashboard/server.js
 
 ## Codex 对话操作
 
-本地 MCP 提供八个只读工具，支持结构化工作量排名和导入需求的原文、GWT 场景及完备率查询。安装额外依赖 `pip install -e 'devops/agent-harness[dev,mcp]'`，并按 [MCP 接入指南](docs/MCP.md) 注册到 Codex。MCP 按需启动，无额外监听端口。
+本地 MCP 默认提供 8 个原查询工具和 7 个 typed 对象工具；`--read-only` 兼容模式只注册原 8 个查询工具。对象写入仅覆盖 project、issue、requirement、scenario、sprint、release、comment，不暴露通用 action、Shell、SQL、文件或 PM2 工具。安装额外依赖 `pip install -e 'devops/agent-harness[dev,mcp]'`，并按 [MCP 接入指南](docs/MCP.md) 注册到 Codex。MCP 按需启动，无额外监听端口；写入、软删除与恢复协议见 [对象写入说明](docs/OBJECT-WRITES.md)。
 
 工作项与看板已支持来源需求编号、系统/章节/需求类型筛选、完整原文追溯、带版本保护的分析补充和 GWT 复核。原始档案不覆盖，业务数据不进入本仓库，详见[需求整合说明](docs/REQUIREMENTS.md)。
 

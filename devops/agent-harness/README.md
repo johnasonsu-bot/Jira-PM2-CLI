@@ -11,6 +11,7 @@
 - 迭代：创建/开始/完成。同项目最多一个活动迭代；未完成工作自动回到待办池。
 - 版本：创建时至少关联一个工作项，未发布版本支持编辑名称、说明与关联项；计划/验证/已发布，关联项全部完成后才能标记发布，已发布版本不可改写。
 - CLI-Anything：真实 HTTP 后端、JSON 输出、REPL、可安装命令、可发现的 Codex Skill。
+- 统一对象协议：项目、工作项、需求、场景、迭代、版本、评论均可通过带 request ID 与 revision 的 CLI/MCP 创建和修改；删除为可恢复 tombstone，并要求先预览影响。
 - 管理分析：项目/活动迭代/指定迭代切换，12 个核心指标卡，风险筛选与任务直达、工作流分布、负责人工作量、数据完整性、项目级版本门禁；工作看板另有 6 项项目管理摘要。
 - SQLite 数据持久化；没有模型 API Key 依赖。
 
@@ -48,10 +49,12 @@ cli-anything-devops --json report --project APP
 cli-anything-devops --json analytics --project APP --scope active
 cli-anything-devops --json analytics --project APP --scope project
 cli-anything-devops --json analytics --project APP --scope sprint:1
+cli-anything-devops --json object create project --fields-file /absolute/path/project.json --request-id create-app-1
+cli-anything-devops --json object get project APP
 cli-anything-devops
 ```
 
-`--json`、`--url`、`--actor` 位于子命令前。单次执行和 REPL 调用相同 HTTP API；没有直接写数据库的 CLI 捷径。错误以 JSON 输出到 stderr，退出码非零。执行修改后用 `issue get` 回读。
+`--json`、`--url`、`--actor` 位于子命令前。单次执行和 REPL 调用相同 HTTP API；没有直接写数据库的 CLI 捷径。对象命令的复杂字段放入 UTF-8 JSON 对象文件，写入必须提供调用方生成的唯一 `--request-id`；更新和恢复还要使用刚读取的 opaque `revision`。错误以 JSON 输出到 stderr，退出码非零。完整七类字段、删除/恢复流程见 [对象写入协议](../../docs/OBJECT-WRITES.md)。
 
 规范 Skill：`skills/cli-anything-devops/SKILL.md`（仓库根目录）；安装包同时包含兼容副本。需要在 Codex 中启用时，可将该技能安装到个人技能目录；也可以在对话中指定仓库内的技能路径并执行 CLI。
 
@@ -68,6 +71,7 @@ cli-anything-devops
 - `GET /api/health`：服务健康。
 - `GET /api/state?project=APP`：网页所需的项目、工作项、迭代、版本、报告和近期活动。
 - `POST /api/call`：`{"action":"issue.create","data":{"project":"APP","title":"修复错误"}}`。
+- 有限对象 action：`object.list/get/create/update/delete.preview/delete/restore`；只接受七类业务对象，不是通用 action、SQL 或 Shell 代理。
 - 写请求需 `Content-Type: application/json`、`X-Forge-Client: 1`；可选 URL 编码的 `X-Forge-Actor`。
 - action 见 `store.py` 的显式映射；所有语义验证与事务集中于 Store。
 - 仅绑定 IPv4 回环；严格检查 Host、Origin，拒绝大请求与任意 Shell 执行。
@@ -86,6 +90,6 @@ PATH="$HOME/.local/share/forge-devops/venv/bin:$PATH" \
 
 ## 当前边界
 
-本版本为本机单用户应用，不是 Jira 的服务连接器或完整替代品。工作类型 epic 为分类，尚无父子工作项树。发布状态是记录和完成度门禁，不会运行外部 CI/CD 或真实部署。Actor 是来源标签而非身份认证。没有多用户权限、远程公开访问、内嵌聊天模型或自动开机启动。Codex 对话发生在 Codex 应用中。
+本版本为本机单用户应用，不是 Jira 的服务连接器或完整替代品。工作类型 epic 为分类，尚无父子工作项树。发布状态是记录和完成度门禁，不会运行外部 CI/CD 或真实部署。Actor、request ID 与删除 confirmation 都不是身份认证。没有多用户权限、远程公开访问、内嵌聊天模型或自动开机启动。Codex 对话发生在 Codex 应用中。MCP 默认注册 8 个原查询工具与 7 个对象工具；需要兼容只读部署时使用 `forge-devops-mcp --read-only`，详见 [MCP 接入](../../docs/MCP.md)。
 
 参考：https://www.atlassian.com/software/jira/features · https://www.atlassian.com/software/jira/features/scrum-boards

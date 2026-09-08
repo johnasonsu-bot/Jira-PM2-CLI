@@ -2,9 +2,12 @@
 import json
 import os
 import shlex
+import sys
 import click
 from .backend import Backend
 from .store import STATUSES, TYPES, PRIORITIES
+
+OBJECT_KINDS = ('project', 'issue', 'requirement', 'scenario', 'sprint', 'release', 'comment')
 
 def emit(ctx, action, data):
     try:
@@ -72,6 +75,89 @@ def issue():
 @cli.group()
 def requirement():
     """需求来源、完整导入导出和带版本保护的分析补充。"""
+
+@cli.group('object')
+def object_group():
+    """Versioned CRUD and recoverable deletion for seven business object kinds."""
+
+def read_object_fields(ctx, input_file):
+    try:
+        fields = json.load(input_file)
+    except (ValueError, UnicodeError) as exc:
+        message = '字段文件不是有效 UTF-8 JSON 对象'
+        click.echo(json.dumps({'error': message}, ensure_ascii=False) if ctx.obj['json'] else message,
+                   err=True)
+        ctx.exit(1)
+    if not isinstance(fields, dict):
+        message = '字段文件必须是 UTF-8 JSON 对象'
+        click.echo(json.dumps({'error': message}, ensure_ascii=False) if ctx.obj['json'] else message,
+                   err=True)
+        ctx.exit(1)
+    return fields
+
+@object_group.command('list')
+@click.argument('kind', type=click.Choice(OBJECT_KINDS))
+@click.option('--project')
+@click.option('--include-deleted', is_flag=True, default=False)
+@click.option('--limit', default=50, type=int)
+@click.option('--offset', default=0, type=int)
+@click.pass_context
+def object_list(ctx, **data):
+    emit(ctx, 'object.list', {k:v for k,v in data.items() if v is not None})
+
+@object_group.command('get')
+@click.argument('kind', type=click.Choice(OBJECT_KINDS))
+@click.argument('id')
+@click.option('--include-deleted', is_flag=True, default=False)
+@click.pass_context
+def object_get(ctx, **data):
+    emit(ctx, 'object.get', data)
+
+@object_group.command('create')
+@click.argument('kind', type=click.Choice(OBJECT_KINDS))
+@click.option('--fields-file', required=True, type=click.File('r', encoding='utf-8'))
+@click.option('--request-id', required=True)
+@click.pass_context
+def object_create(ctx, kind, fields_file, request_id):
+    emit(ctx, 'object.create', {'kind':kind, 'fields':read_object_fields(ctx,fields_file),
+                                'request_id':request_id})
+
+@object_group.command('update')
+@click.argument('kind', type=click.Choice(OBJECT_KINDS))
+@click.argument('id')
+@click.option('--revision', required=True)
+@click.option('--fields-file', required=True, type=click.File('r', encoding='utf-8'))
+@click.option('--request-id', required=True)
+@click.pass_context
+def object_update(ctx, kind, id, revision, fields_file, request_id):
+    emit(ctx, 'object.update', {'kind':kind, 'id':id, 'revision':revision,
+                                'fields':read_object_fields(ctx,fields_file),
+                                'request_id':request_id})
+
+@object_group.command('delete-preview')
+@click.argument('kind', type=click.Choice(OBJECT_KINDS))
+@click.argument('id')
+@click.pass_context
+def object_delete_preview(ctx, **data):
+    emit(ctx, 'object.delete.preview', data)
+
+@object_group.command('delete')
+@click.argument('kind', type=click.Choice(OBJECT_KINDS))
+@click.argument('id')
+@click.option('--confirmation', required=True)
+@click.option('--request-id', required=True)
+@click.pass_context
+def object_delete(ctx, **data):
+    emit(ctx, 'object.delete', data)
+
+@object_group.command('restore')
+@click.argument('kind', type=click.Choice(OBJECT_KINDS))
+@click.argument('id')
+@click.option('--revision', required=True)
+@click.option('--request-id', required=True)
+@click.pass_context
+def object_restore(ctx, **data):
+    emit(ctx, 'object.restore', data)
 
 @requirement.command('import')
 @click.option('--file', 'input_file', required=True, type=click.File('r', encoding='utf-8'))
@@ -340,7 +426,18 @@ def repl(ctx):
     skin.print_goodbye()
 
 def main():
-    cli()
+    try:
+        result = cli(standalone_mode=False)
+        if isinstance(result, int) and result:
+            raise SystemExit(result)
+    except click.ClickException as exc:
+        if '--json' in sys.argv[1:]:
+            click.echo(json.dumps({'error': exc.format_message()}, ensure_ascii=False), err=True)
+        else:
+            exc.show()
+        raise SystemExit(exc.exit_code) from None
+    except click.exceptions.Exit as exc:
+        raise SystemExit(exc.exit_code) from None
 
 if __name__ == '__main__':
     main()
