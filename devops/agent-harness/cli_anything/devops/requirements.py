@@ -46,19 +46,30 @@ def missing_fields(row):
 def source_context(raw, documents):
     filename = raw.get('source_file') or raw.get('src_file') or ''
     recorded = raw.get('source_line') or raw.get('src_line')
-    lines = documents.get(filename, '').splitlines()
+    document = documents.get(filename, '')
     description = re.sub(r'\s+', '', raw.get('req_desc') or '')
-    anchor = description[:60]
-    matches = [n for n,line in enumerate(lines) if len(anchor)>=16 and anchor in re.sub(r'\s+','',line)]
-    # Do not silently interpret source extractor positions as physical Markdown lines.
-    resolved = matches[0]+1 if len(matches)==1 else None
-    position = resolved or (recorded if type(recorded) is int else 1)
-    start = max(0, position-4)
-    excerpt = '\n'.join(f'{n+1}: {lines[n]}' for n in range(start,min(len(lines),start+15)))
-    note = (f'按需求正文片段定位到文档第 {resolved} 行；原来源记录行号仍保留为 {recorded}。'
-            if resolved else '未唯一定位正文；以下仅为原记录行号附近文本，不作为已核实的正文引用。')
+    normalized = re.sub(r'\s+', '', document)
+    start = normalized.find(description) if len(description)>=16 else -1
+    unique = start>=0 and normalized.find(description,start+1)<0
+    # A prefix match or extractor row number cannot establish ownership of nearby
+    # document text. Only a unique, full-body match may supply an excerpt, and even
+    # then adjacent text on that same line can belong to another hidden requirement.
+    resolved, excerpt = None, ''
+    if unique:
+        first = 0
+        # Map just the matched bounds back to the source, without allocating an
+        # index per character for a potentially large imported document.
+        for index,character in enumerate(re.finditer(r'\S',document)):
+            if index==start: first=character.start()
+            if index==start+len(description)-1:
+                owned = document[first:character.end()]
+                resolved = document.count('\n',0,first)+1
+                excerpt = '\n'.join(f'{resolved+n}: {line}' for n,line in enumerate(owned.splitlines()))
+                break
+    note = (f'按需求完整正文唯一匹配到文档第 {resolved} 行；原来源记录行号仍保留为 {recorded}。'
+            if resolved else '未唯一定位完整需求正文；不展示无法确认归属的文档摘录。完整文档可通过档案导出读取。')
     return {'file':filename,'line':recorded,'resolved_line':resolved,
-            'match':'body' if resolved else 'unverified','excerpt':note+'\n'+excerpt}
+            'match':'body' if resolved else 'unverified','excerpt':note+('\n'+excerpt if excerpt else '')}
 
 
 def initialize(db):

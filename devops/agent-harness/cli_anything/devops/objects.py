@@ -229,6 +229,8 @@ class ObjectService:
                 sid = str(row['sprint_id'])
                 if not life.visible('sprint',sid,restoring) or life.raw('sprint',sid)['project']!=row['project']:
                     raise DomainError('恢复冲突：关联迭代不可用',409)
+                if life.raw('sprint',sid)['status']=='completed' and row['status']!='done':
+                    raise DomainError('恢复冲突：未完成工作项不能恢复到已完成迭代',409)
             if child == 'release':
                 for issue in json.loads(row['issue_keys']):
                     if not life.visible('issue',issue,restoring) or life.raw('issue',issue)['project']!=row['project']:

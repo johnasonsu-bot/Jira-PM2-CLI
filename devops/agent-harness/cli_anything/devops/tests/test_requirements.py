@@ -51,7 +51,8 @@ def test_lossless_roundtrip_and_existing_issues_untouched(store, bundle):
     assert detail['original'] == bundle['original_requirements'][0]
     assert detail['current']['workload_md'] is None
     assert detail['scenarios'][0]['raw'] == bundle['scenarios'][0]
-    assert '原始正文' in detail['source']['excerpt']
+    assert detail['source']['match'] == 'unverified'
+    assert '原始正文' not in detail['source']['excerpt']
     assert detail['missing'] == ['priority', 'acceptance_criteria', 'deliverable', 'workload_md']
     exported = store.call('requirement.export', {'source_id':bundle['source_id']})
     assert exported['snapshot'] == bundle
