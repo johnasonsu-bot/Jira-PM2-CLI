@@ -43,7 +43,7 @@ assert store.call('project.list') == []
 
 ### Task 2: CLI and MCP adapters, documentation
 
-**Files:** Modify `devops/agent-harness/cli_anything/devops/devops_cli.py`, `mcp_server.py`, optionally create `object_cli.py` / `object_mcp.py` for focused adapters; tests `tests/test_object_clients.py`, adjust `tests/test_mcp.py`; update `README.md`, `docs/MCP.md`, `docs/MCP-SECURITY.md`, `docs/CLI-DEVOPS-MCP-EVIDENCE.md`, `docs/OBJECT-WRITES.md`, the three tracked `cli-anything-devops` SKILL.md variants (root skills, package skills, devops skill already present). No business backend changes.
+**Files:** Modify `devops/agent-harness/cli_anything/devops/devops_cli.py`, `mcp_server.py`, optionally create `object_cli.py` / `object_mcp.py` for focused adapters; tests `tests/test_object_clients.py`, adjust `tests/test_mcp.py`; update `README.md`, `docs/MCP.md`, `docs/MCP-SECURITY.md`, `docs/CLI-DEVOPS-MCP-EVIDENCE.md`, `docs/OBJECT-WRITES.md`, the two tracked `cli-anything-devops` SKILL.md variants (`skills/cli-anything-devops/SKILL.md`, `devops/agent-harness/cli_anything/devops/skills/SKILL.md`). Root later synchronizes the installed local skill separately. No business backend changes.
 
 **Interfaces:** Consume Task 1 object actions exactly; no direct SQLite or Shell. Preserve old eight tools; register new seven in write mode, support `create_mcp(url, read_only=False)` and `--read-only` CLI flag. ObjectKind is a Literal of seven values in MCP and click.Choice in CLI. New writes require request_id, update/restore revision, delete confirmation. Include_deleted is explicit false by default.
 
